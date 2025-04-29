@@ -1,5 +1,6 @@
 use crate::tensor::tensor_ref::TensorRef;
 use crate::tensor::GradFn;
+use std::fmt;
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
@@ -17,11 +18,20 @@ pub struct Tensor {
 
 impl Tensor {
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> TensorRef {
-        assert_eq!(
-            data.len(),
-            shape.iter().product(),
-            "Data size must match shape"
-        );
+        // accept scalars of shape []
+        if shape.is_empty() {
+            assert_eq!(data.len(), 1, "Data size must be 1 for scalar");
+        } else {
+            assert!(
+                shape.len() > 1,
+                "A Shape of 1 dim is ambiguous (either a row or column vector)"
+            );
+            assert_eq!(
+                data.len(),
+                shape.iter().product(),
+                "Data size must match shape"
+            );
+        }
         TensorRef(Rc::new(Tensor {
             data,
             shape,
@@ -54,6 +64,21 @@ impl Tensor {
             grad_fn,
             parents,
         }))
+    }
+
+    pub fn transpose(&self) -> TensorRef {
+        assert_eq!(self.shape.len(), 2, "Transpose only supports 2D tensors");
+        let mut transposed_data = vec![0.0; self.data.len()];
+        let rows = self.shape[0];
+        let cols = self.shape[1];
+
+        for i in 0..rows {
+            for j in 0..cols {
+                transposed_data[j * rows + i] = self.data[i * cols + j];
+            }
+        }
+
+        Tensor::new(transposed_data, vec![cols, rows])
     }
 }
 

@@ -1,6 +1,9 @@
+use crate::tensor::grad_fn::SumBack;
 use crate::tensor::{GradFn, Tensor};
+
 use std::{
     cell::RefCell,
+    collections::HashSet,
     fmt,
     ops::Deref,
     rc::{Rc, Weak},
@@ -9,6 +12,10 @@ use std::{
 pub struct TensorRef(pub Rc<Tensor>);
 
 impl TensorRef {
+    pub fn requires_grad(&self) -> bool {
+        self.0.requires_grad
+    }
+
     pub fn sum(&self) -> TensorRef {
         let sum_val = self.data.iter().sum();
         // If no grads needed, just return plain leaf tensor
@@ -23,6 +30,15 @@ impl TensorRef {
 
         // Construct a scalar tensor with grad_fn and parents
         Tensor::new_with_options(vec![sum_val], vec![], true, grad_fn, parents)
+    }
+
+    pub fn mean(&self) -> TensorRef {
+        let sum: TensorRef = self.sum();
+        // Divide by the number of elements
+        let len: usize = self.shape.iter().product();
+        // no broadcasting
+        let div = Tensor::new(vec![len as f32], vec![]);
+        &sum / &div
     }
 
     pub fn matmul(&self, other: &TensorRef) -> TensorRef {
@@ -116,16 +132,16 @@ impl TensorRef {
     }
 
     pub fn backward(&self) {
-        println!("[backward] Starting backward pass on: {:?}", self);
+        // println!("[backward] Starting backward pass on: {:?}", self);
 
         // 1. First, set the output gradient to 1.0 if not already set
         {
             let mut grad_ref = self.grad.borrow_mut();
             if grad_ref.is_none() {
-                println!("[backward] Setting output grad to 1.0 for {:?}", self.shape);
+                // println!("[backward] Setting output grad to 1.0 for {:?}", self.shape);
                 grad_ref.replace(vec![1.0]);
             } else {
-                println!(
+                panic!(
                     "[backward] Output grad already set: {:?}",
                     grad_ref.as_ref()
                 );
@@ -137,24 +153,22 @@ impl TensorRef {
 
         for node in sorted_nodes.iter().rev() {
             if let Some(grad_fn) = &node.grad_fn {
-                println!("[backward] Backwarding through node: {:?}", node);
+                // println!("[backward] Backwarding through node: {:?}", node);
                 let grad = node.grad.borrow();
 
                 if let Some(grad) = grad.as_ref() {
-                    println!("[backward] Processing node: {:?}", node);
+                    // println!("[backward] Processing node: {:?}", node);
                     let parents_grad = grad_fn.backward(grad);
 
-                    drop(grad);
-
                     // Distribute gradients to parents
-                    for (i, (parent_weak, parent_new_grads)) in
+                    for (_, (parent_weak, parent_new_grads)) in
                         node.parents.iter().zip(parents_grad.iter()).enumerate()
                     {
                         if let Some(parent_rc) = parent_weak.upgrade() {
-                            println!(
-                                "[backward] Propagating to parent {}: {:?}",
-                                i, parent_new_grads
-                            );
+                            // println!(
+                            // "[backward] Propagating to parent {}: {:?}",
+                            // i, parent_new_grads
+                            // );
 
                             // Update parent's gradients with accumulation
                             let mut parent_grad = parent_rc.grad.borrow_mut();
