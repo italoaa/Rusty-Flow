@@ -42,30 +42,8 @@ impl Deref for TensorRef {
 impl TensorRef {
     // modifies itself
     pub fn transpose(&self) -> TensorRef {
-        assert_eq!(self.shape.len(), 2, "Transpose only supports 2D tensors");
-        let rows = self.shape[0];
-        let cols = self.shape[1];
-
-        let mut data = vec![0.0 as f32; self.0.data.len()];
-        let shape = vec![cols, rows];
-
-        for i in 0..rows {
-            for j in 0..cols {
-                data[j * rows + i] = self.data[i * cols + j];
-            }
-        }
-
-        Tensor::new_with_options(
-            data,
-            shape,
-            self.requires_grad,
-            // self.grad_fn.clone(),
-            // grad fn for transpose is not implemented yet
-            None,
-            self.parents.clone(),
-        )
+        self.0.transpose()
     }
-
     pub fn backward(&self) {
         autodiff::backward(self);
     }
@@ -115,6 +93,31 @@ impl Tensor {
             grad_fn,
             parents,
         }))
+    }
+
+    pub fn transpose(&self) -> TensorRef {
+        assert_eq!(self.shape.len(), 2, "Transpose only supports 2D tensors");
+        let rows = self.shape[0];
+        let cols = self.shape[1];
+
+        let mut data = vec![0.0 as f32; self.data.len()];
+        let shape = vec![cols, rows];
+
+        for i in 0..rows {
+            for j in 0..cols {
+                data[j * rows + i] = self.data[i * cols + j];
+            }
+        }
+
+        Tensor::new_with_options(
+            data,
+            shape,
+            self.requires_grad,
+            // self.grad_fn.clone(),
+            // grad fn for transpose is not implemented yet
+            None,
+            self.parents.clone(),
+        )
     }
 }
 

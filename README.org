@@ -1,8 +1,10 @@
 #+title: backprop
 * Task list
-** TODO dimensions
+** DONE dimensions
 right now I just made the [[file:src/tensor/tensor.rs::"A Shape of 1 dim is ambiguous (either a row or column vector)"][change]] to not accept a tensor of 1 dimension because it is ambiguous if it is a column or row vector.
 - you should look into pytorch to see what they do. if they set it by default to row or col vector
+** TODO Sum and Mean
+they should take a dim arg
 ** TODO Matmul Back
 I havent tested the matmul backprop yet but it is [[file:src/tensor/grad_fn.rs::// df/dy = x^T][implemented]] so in theory it should work (it wont)
 ** TODO look into the shapes of the tensors

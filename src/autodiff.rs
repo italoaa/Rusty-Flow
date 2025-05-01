@@ -35,9 +35,10 @@ impl GradFn for AddBack {
 // ================ MatMul OPERATION ==================
 
 pub struct MMBack {
-    pub left: TensorRef,
-    pub right: TensorRef,
+    pub left: Rc<Tensor>,
+    pub right: Rc<Tensor>,
 }
+
 impl GradFn for MMBack {
     fn backward(&self, grad_output: &Vec<f32>) -> Vec<Vec<f32>> {
         // The gradient of the matrix multiplication is a bit more complex
@@ -58,8 +59,8 @@ impl GradFn for MMBack {
 
         let grads_tensor = Tensor::new(grad_output.clone(), vec![m, p]);
 
-        let grad_left = grads_tensor.matmul(&right);
-        let grad_right = left.matmul(&grads_tensor);
+        let grad_left = grads_tensor.mm(&right);
+        let grad_right = left.mm(&grads_tensor);
 
         return vec![grad_left.data.clone(), grad_right.data.clone()];
     }

@@ -39,10 +39,6 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
     }
 }
 
-// ================ MatMul OPERATION ==================
-
-// ================ SUM OPERATION ==================
-
 // ================ SUBSTRACT OPERATION ==================
 
 impl<'a, 'b> Sub<&'b TensorRef> for &'a TensorRef {
@@ -144,10 +140,6 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
 // ================ SUM OPERATION =========================
 
 impl TensorRef {
-    pub fn requires_grad(&self) -> bool {
-        self.requires_grad
-    }
-
     pub fn sum(&self) -> TensorRef {
         let sum_val = self.data.iter().sum();
         // If no grads needed, just return plain leaf tensor
@@ -163,6 +155,15 @@ impl TensorRef {
         // Construct a scalar tensor with grad_fn and parents
         Tensor::new_with_options(vec![sum_val], vec![], true, grad_fn, parents)
     }
+}
+
+// ================ Mean OPERATION ==================
+
+impl TensorRef {
+    // little helper
+    pub fn requires_grad(&self) -> bool {
+        self.requires_grad
+    }
 
     pub fn mean(&self) -> TensorRef {
         let sum: TensorRef = self.sum();
@@ -172,8 +173,12 @@ impl TensorRef {
         let div = Tensor::new(vec![len as f32], vec![]);
         &sum / &div
     }
+}
 
-    pub fn matmul(&self, other: &TensorRef) -> TensorRef {
+// ================ MatMul OPERATION ==================
+
+impl TensorRef {
+    pub fn mm(&self, other: &TensorRef) -> TensorRef {
         // TODO: impl broadcasting in utils.rs
         assert_eq!(
             self.shape[1], other.shape[0],
@@ -192,6 +197,24 @@ impl TensorRef {
             }
         }
 
-        Tensor::new(result, vec![self.shape[0], other.shape[1]])
+        let requires_grad = self.requires_grad || other.requires_grad;
+        let grad_fn = if requires_grad {
+            Some(Rc::new(MMBack {
+                // expects Rc<tensor>
+                left: self.0.clone(),
+                right: other.0.clone(),
+            }) as Rc<dyn GradFn>)
+        } else {
+            None
+        };
+        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+
+        Tensor::new_with_options(
+            result,
+            vec![self.shape[0], other.shape[1]],
+            requires_grad,
+            grad_fn,
+            parents,
+        )
     }
 }
