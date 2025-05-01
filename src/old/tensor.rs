@@ -16,16 +16,13 @@ pub struct Tensor {
     pub parents: Vec<Weak<Tensor>>,
 }
 
+// Constructors
 impl Tensor {
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> TensorRef {
         // accept scalars of shape []
         if shape.is_empty() {
             assert_eq!(data.len(), 1, "Data size must be 1 for scalar");
         } else {
-            assert!(
-                shape.len() > 1,
-                "A Shape of 1 dim is ambiguous (either a row or column vector)"
-            );
             assert_eq!(
                 data.len(),
                 shape.iter().product(),

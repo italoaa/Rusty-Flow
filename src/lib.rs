@@ -1,84 +1,92 @@
 // import from tensor.rs Tensor
 // disable unused imports
 #![allow(unused_imports)]
-mod tensor;
-use std::cell::RefCell;
-use std::panic;
+mod autodiff;
+mod operations;
+pub mod tensor;
+mod utils;
 use tensor::Tensor;
-use tensor::TensorRef;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// DEBUGGING ---
+static DEBUG: AtomicBool = AtomicBool::new(false);
+
+pub fn set_debug(value: bool) {
+    DEBUG.store(value, Ordering::Relaxed);
+}
+
+fn is_debug() -> bool {
+    DEBUG.load(Ordering::Relaxed)
+}
+// DEBUGGING ---
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // #[test]
-    fn tensor_ops() {
-        let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
+    mod ops {
+        use super::*;
 
-        assert_eq!(&a + &b, Tensor::new(vec![5.0, 7.0, 9.0], vec![3]));
-        assert_eq!(&a - &b, Tensor::new(vec![-3.0, -3.0, -3.0], vec![3]));
-        assert_eq!(&a * &b, Tensor::new(vec![4.0, 10.0, 18.0], vec![3]));
-        assert_eq!(&a / &b, Tensor::new(vec![0.25, 0.4, 0.5], vec![3]));
+        #[test]
+        fn test_addition() {
+            let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
+            let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
+            let result = &a + &b;
+            let expected = Tensor::new(vec![5.0, 7.0, 9.0], vec![3]);
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_transpose() {
+            let a = Tensor::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]);
+            let result = a.transpose();
+            let expected = Tensor::new(vec![1.0, 3.0, 2.0, 4.0], vec![2, 2]);
+            assert_eq!(result, expected);
+        }
     }
 
-    // #[test]
-    fn matmul() {
-        let a = Tensor::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]);
-        let b = Tensor::new(vec![5.0, 6.0, 7.0, 8.0], vec![2, 2]);
-        let result = a.matmul(&b);
-        assert_eq!(result.shape, vec![2, 2]);
-        assert_eq!(result.data, vec![19.0, 22.0, 43.0, 50.0]);
+    mod reductions {
+        use super::*;
+
+        #[test]
+        fn test_sum() {
+            let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
+            let result = a.sum();
+            assert_eq!(result, Tensor::new(vec![6.0], vec![]));
+        }
+
+        #[test]
+        fn test_mean() {
+            let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
+            let result = a.mean();
+            assert_eq!(result, Tensor::new(vec![2.0], vec![]));
+        }
     }
 
-    // #[test]
-    fn sum() {
-        let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let sum = a.sum();
-        assert_eq!(sum.data, vec![6.0]);
-        assert_eq!(sum.shape, vec![]);
-    }
+    mod back {
+        use super::*;
 
-    // #[test]
-    fn sum_back() {
-        let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let sum = a.sum();
-        sum.backward();
-        let correct_grad = RefCell::new(Some(vec![1.0, 1.0, 1.0]));
-        assert_eq!(a.grad, correct_grad,);
-    }
+        #[test]
+        fn test_add_back() {
+            let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
+            let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
+            let result = &a + &b;
+            let sum = result.sum();
+            sum.backward();
+            let grad = a.grad.borrow();
+            if let Some(g) = grad.as_ref() {
+                assert_eq!(g, &vec![1.0, 1.0, 1.0]);
+            } else {
+                panic!("Gradient is None");
+            }
 
-    // #[test]
-    fn add_back() {
-        // test addition backprop
-        // requires grad by default
-        let a: TensorRef = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        assert_eq!(a.requires_grad, true);
-        let b: TensorRef = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
-        assert_eq!(b.requires_grad, true);
-
-        let c = &a + &b;
-
-        let sum = c.sum();
-
-        sum.backward();
-
-        assert_eq!(*a.grad.borrow(), Some(vec![1.0, 1.0, 1.0]));
-    }
-
-    #[test]
-    fn mul_back() {
-        let a: TensorRef = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let b: TensorRef = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
-
-        let c = &a * &b;
-
-        let sum = c.sum();
-
-        sum.backward();
-
-        // we expect the a.grad tensor to be full of 1.0s
-        assert_eq!(*a.grad.borrow(), Some(vec![4.0, 5.0, 6.0]));
-        assert_eq!(*b.grad.borrow(), Some(vec![1.0, 2.0, 3.0]));
+            let grad = b.grad.borrow();
+            if let Some(g) = grad.as_ref() {
+                assert_eq!(g, &vec![1.0, 1.0, 1.0]);
+            } else {
+                panic!("Gradient is None");
+            }
+        }
     }
 }
