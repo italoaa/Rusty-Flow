@@ -11,7 +11,7 @@ use broadcast::{broadcast_shape, BroadcastIterator};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // DEBUGGING ---
-static DEBUG: AtomicBool = AtomicBool::new(false);
+static DEBUG: AtomicBool = AtomicBool::new(true);
 
 pub fn set_debug(value: bool) {
     DEBUG.store(value, Ordering::Relaxed);

@@ -74,7 +74,11 @@ impl Tensor {
             assert_eq!(
                 data.len(),
                 shape.iter().product(),
-                "Data size must match shape"
+                "Data size must match shape {:?}, {} != {}, (data: {:?})",
+                shape,
+                data.len(),
+                shape.iter().product::<usize>(),
+                data
             );
         }
 
@@ -100,7 +104,6 @@ impl Tensor {
             shape.iter().product(),
             "Data size must match shape"
         );
-
         let strides = get_strides(&shape);
 
         TensorRef(Rc::new(Tensor {
@@ -166,6 +169,27 @@ impl Tensor {
 impl PartialEq for Tensor {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data && self.shape == other.shape
+    }
+}
+
+impl Tensor {
+    pub fn approx_eq(&self, other: &TensorRef, tol: f32) -> bool {
+        if self.shape != other.shape || self.data.len() != other.data.len() {
+            return false;
+        }
+        self.data
+            .iter()
+            .zip(other.data.iter())
+            .all(|(a, b)| (a - b).abs() <= tol)
+    }
+
+    pub fn clear_grad(&self) {
+        self.grad.replace(None);
+        for parent in &self.parents {
+            if let Some(parent) = parent.upgrade() {
+                parent.clear_grad();
+            }
+        }
     }
 }
 

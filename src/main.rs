@@ -134,12 +134,17 @@ fn main() {
     let data_loader = DataLoader::new(dataset, batch_size, shuffle);
 
     println!(
+        "ba {}, suf: {}",
+        data_loader.batch_size, data_loader.shuffle
+    );
+
+    println!(
         "DataLoader created with {} batches of size {}",
         data_loader.batches.len(),
         batch_size
     );
 
-    let mut i = 0;
+    let i = 0;
     for batch in &data_loader.batches {
         println!("Batch data shape: {:?}", batch.data.shape);
         println!("Batch labels shape: {:?}", batch.labels.shape);

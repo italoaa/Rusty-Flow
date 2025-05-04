@@ -14,6 +14,15 @@ mod ops {
     }
 
     #[test]
+    fn test_addition_scalar() {
+        let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3, 1]);
+        let b = Tensor::new(vec![4.0], vec![1]);
+        let result = &a + &b;
+        let expected = Tensor::new(vec![5.0, 6.0, 7.0], vec![3, 1]);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
     fn test_subtraction() {
         let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
         let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);

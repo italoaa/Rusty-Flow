@@ -1,6 +1,11 @@
 #+title: Rusty flow
-* TODO Broadcasting
-- i need to implement broadcasting for summation at least
+
+* TODO batch mm backwards
+2d works but batched mm is not tested explicitly
+
+* TODO dim arg for the reductions and activations
+softmax needs a dimension where to act as well as mean and sum
+
 * TODO NN testing
 - before going into mnist i should see if i can do a complete fw and bw pass
 
