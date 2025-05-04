@@ -1,49 +1,9 @@
-#+title: backprop
-* Task list
-** DONE dimensions
-right now I just made the [[file:src/tensor/tensor.rs::"A Shape of 1 dim is ambiguous (either a row or column vector)"][change]] to not accept a tensor of 1 dimension because it is ambiguous if it is a column or row vector.
-- you should look into pytorch to see what they do. if they set it by default to row or col vector
-** TODO Sum and Mean
-they should take a dim arg
-** TODO Matmul Back
-I havent tested the matmul backprop yet but it is [[file:src/tensor/grad_fn.rs::// df/dy = x^T][implemented]] so in theory it should work (it wont)
-** TODO look into the shapes of the tensors
-I think i have been neglecting them in this initial implementation because the backfunctions dont even think of shapes:
-- The argument to backward is a grad_output vector but we dont know its shape.
-- I think it should be a tensor type
-#+begin_src rust
+#+title: Rusty flow
+* TODO Broadcasting
+- i need to implement broadcasting for summation at least
+* TODO NN testing
+- before going into mnist i should see if i can do a complete fw and bw pass
 
-struct Addback;
-impl GradFn for Addback {
-    fn backward(&self, grad_output: &Vec<f32>) -> Vec<Vec<f32>> {
-        vec![grad_output.clone(), grad_output.clone()]
-    }
-}
-#+end_src
-
-- In here we avoid it by calculating it from the other tensors but idk if this is scalable
-#+begin_src rust
-pub struct MMback {
-    pub left: TensorRef,
-    pub right: TensorRef,
-}
-impl GradFn for MMback {
-    fn backward(&self, grad_output: &Vec<f32>) -> Vec<Vec<f32>> {
-        let m = self.left.shape[0];
-        let p = self.right.shape[1];
-        let right = self.right.transpose();
-        let left = self.left.transpose();
-
-        let grads_tensor = Tensor::new(grad_output.clone(), vec![m, p]);
-
-        let grad_left = grads_tensor.matmul(&right);
-        let grad_right = left.matmul(&grads_tensor);
-
-        return vec![grad_left.data.clone(), grad_right.data.clone()];
-    }
-}
-#+end_src
-* Future
-- the idea is to make it to mnist
-- to do this we still need more ops like Cross entropy and relu
-- with their respective backprop funcs
+# Local Variables:
+# jinx-local-words: "Rustyflow"
+# End:

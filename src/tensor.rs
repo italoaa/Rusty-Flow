@@ -1,5 +1,8 @@
 use crate::autodiff;
 use crate::autodiff::GradFn;
+use rand::prelude::*;
+use rand_distr::StandardNormal;
+
 use std::fmt;
 use std::{
     cell::RefCell,
@@ -11,6 +14,7 @@ use std::{
 pub struct Tensor {
     pub data: Vec<f32>, // data is stored in row-major order
     pub shape: Vec<usize>,
+    pub strides: Vec<usize>, // stride is not used yet
     pub requires_grad: bool,
     pub grad: RefCell<Option<Vec<f32>>>, // gradient of the tensor
     pub grad_fn: Option<Rc<dyn GradFn>>,
@@ -49,6 +53,18 @@ impl TensorRef {
     }
 }
 
+fn get_strides(shape: &Vec<usize>) -> Vec<usize> {
+    let mut strides = vec![0; shape.len()];
+    let mut stride = 1;
+
+    for i in (0..shape.len()).rev() {
+        strides[i] = stride;
+        stride *= shape[i];
+    }
+
+    strides
+}
+
 impl Tensor {
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> TensorRef {
         // accept scalars of shape []
@@ -61,14 +77,14 @@ impl Tensor {
                 "Data size must match shape"
             );
         }
-        TensorRef(Rc::new(Tensor {
+
+        Tensor::new_with_options(
             data,
             shape,
-            requires_grad: true,
-            grad: RefCell::new(None),
-            grad_fn: None,
-            parents: vec![],
-        }))
+            true, // by default requires_grad is true
+            None,
+            vec![],
+        )
     }
 
     // Full constructor
@@ -85,14 +101,40 @@ impl Tensor {
             "Data size must match shape"
         );
 
+        let strides = get_strides(&shape);
+
         TensorRef(Rc::new(Tensor {
             data,
             shape,
+            strides,
             requires_grad,
             grad: RefCell::new(None),
             grad_fn,
             parents,
         }))
+    }
+
+    // Mainly used for making biases so requires_grad is true
+    pub fn ones_like(shape: Vec<usize>) -> TensorRef {
+        let size = shape.iter().product();
+        let data = vec![1.0; size];
+
+        Tensor::new(data, shape)
+    }
+
+    // Sample from a normal distribution
+    // mainly used to make weights so requires_grad is true
+    pub fn new_random(shape: Vec<usize>) -> TensorRef {
+        let size = shape.iter().product();
+
+        let data: Vec<f32> = (0..size)
+            .map(|_| {
+                let val: f32 = rand::rng().sample(StandardNormal);
+                val
+            })
+            .collect();
+
+        Tensor::new(data, shape)
     }
 
     pub fn transpose(&self) -> TensorRef {
