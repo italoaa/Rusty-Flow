@@ -3,34 +3,64 @@ use crate::tensor::{Tensor, TensorRef};
 use std::rc::Rc;
 
 pub struct BroadcastIterator {
-    left: Rc<Tensor>,
-    right: Rc<Tensor>,
+    left_shape: Vec<usize>,
+    right_shape: Vec<usize>,
     out_shape: Vec<usize>,
     index: usize,
     total: usize,
 }
 
-// The idea of this operation is to translate the outputs flat index into
-// the flat index for both the input matrices into the operation
-// It also does broadcasting, but the main idea is the above
+/// Resolves the index for the broadcasted tensor.
+/// e.g. for a tensor of shape [2, 3, 4] and index 5,
+/// the resolved index would be [0, 1, 1] (0*3*4 + 1*4 + 1)
+/// This is done by iterating over the dimensions in reverse order.
+pub fn resolve_broadcast_index(out_idx: usize, out_shape: &[usize], in_shape: &[usize]) -> usize {
+    let mut remaining = out_idx;
+    let mut idx = 0;
+    let mut stride = 1;
+
+    for dim in (0..out_shape.len()).rev() {
+        let dim_size = out_shape[dim];
+        let pos = remaining % dim_size;
+        remaining /= dim_size;
+
+        let in_dim = *in_shape.get(dim).unwrap_or(&1);
+        let input_pos = if in_dim == 1 { 0 } else { pos };
+        idx += input_pos * stride;
+
+        if dim < in_shape.len() {
+            stride *= in_shape[dim];
+        }
+    }
+
+    idx
+}
+
 impl BroadcastIterator {
     pub fn new(left: &TensorRef, right: &TensorRef) -> Self {
+        //iin shapes
         let out_shape = broadcast_shape(&left.shape, &right.shape);
-        let total = out_shape.iter().product();
-
         if is_debug() {
-            println!("Creating BroadcastIterator:");
-            println!("  Left shape: {:?}", left.shape);
-            println!("  Right shape: {:?}", right.shape);
-            println!("  Output shape: {:?}", out_shape);
-            println!("  Total elements: {}", total);
+            println!("BroadcastIterator::new left: {:?}", left.shape);
+            println!("BroadcastIterator::new right: {:?}", right.shape);
+            println!("BroadcastIterator::new out_shape: {:?}", out_shape);
         }
-
-        let left = left.0.clone();
-        let right = right.0.clone();
+        let total = out_shape.iter().product();
         BroadcastIterator {
-            left,
-            right,
+            left_shape: left.shape.clone(),
+            right_shape: right.shape.clone(),
+            out_shape,
+            index: 0,
+            total,
+        }
+    }
+
+    pub fn new_with_shapes(left_shape: &[usize], right_shape: &[usize]) -> Self {
+        let out_shape = broadcast_shape(left_shape, right_shape);
+        let total = out_shape.iter().product();
+        BroadcastIterator {
+            left_shape: left_shape.to_vec(),
+            right_shape: right_shape.to_vec(),
             out_shape,
             index: 0,
             total,
@@ -42,163 +72,41 @@ impl Iterator for BroadcastIterator {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Return None if we've processed all elements
-        // println!(
-        // "-------------------------- REQUESTING INDEX {} -------------",
-        // self.index + 1
-        // );
         if self.index >= self.total {
             return None;
         }
 
-        // Calculate multi-dimensional indices from flat index
-        let mut remaining = self.index;
-        let mut left_index = 0;
-        let mut right_index = 0;
-        let mut stride_left = 1;
-        let mut stride_right = 1;
+        let left_idx = resolve_broadcast_index(self.index, &self.out_shape, &self.left_shape);
+        let right_idx = resolve_broadcast_index(self.index, &self.out_shape, &self.right_shape);
 
-        // Debug: core iteration parameters
-        if is_debug() {
-            println!("[DEBUG] Processing element {}/{}", self.index, self.total);
-        }
-
-        // Process dimensions from least significant to most significant
-        for dim in (0..self.out_shape.len()).rev() {
-            // Calculate index in this dimension
-            let dim_size = self.out_shape[dim];
-            let idx = remaining % dim_size;
-            remaining /= dim_size;
-
-            // println!("Index in dim {} is {}", dim, idx);
-
-            if dim < self.left.shape.len() {
-                if self.left.shape[dim] == dim_size {
-                    // Normal case: use the calculated index
-                    left_index += idx * stride_left;
-                } else if self.left.shape[dim] == 1 {
-                    // Broadcasting case: reuse the same element
-                } else {
-                    // This should never happen if broadcast_shape validation is correct
-                    panic!("Unexpected shape mismatch in dimension {}", dim);
-                }
-            }
-
-            // Calculate right index for this dimension
-            if dim < self.right.shape.len() {
-                if self.right.shape[dim] == dim_size {
-                    // Normal case: use the calculated index
-                    right_index += idx * stride_right;
-                } else if self.right.shape[dim] == 1 {
-                    // Broadcasting case: reuse the same element
-                } else {
-                    panic!("Unexpected shape mismatch in dimension {}", dim);
-                }
-            }
-
-            // Update strides for next dimension
-            if dim < self.left.shape.len() {
-                stride_left *= self.left.shape[dim];
-            }
-
-            if dim < self.right.shape.len() {
-                stride_right *= self.right.shape[dim];
-            }
-
-            if is_debug() {
-                println!(
-                    "[DEBUG] End of dim loop dim={} with\nlidx: {}, stl: {}\nridx: {}, str: {}",
-                    dim, left_index, stride_left, right_index, stride_right
-                );
-            }
-        }
-
-        if is_debug() {
-            println!(
-                "[DEBUG] Mapped flat index {} to (L:{}, R:{})",
-                self.index, left_index, right_index
-            );
-        }
-
-        // Increment index for next iteration
         self.index += 1;
-
-        Some((left_index, right_index))
+        Some((left_idx, right_idx))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let remaining = self.total - self.index;
-
-        if is_debug() {
-            println!("[broadcasting] size_hint: remaining={}", remaining);
-        }
-
         (remaining, Some(remaining))
     }
 }
 
-/// Computes the broadcasted shape between two tensor shapes
-///
-/// Following numpy broadcasting rules:
-/// - Start from trailing dimensions
-/// - Dimensions are compatible if they're equal or one of them is 1
-pub fn broadcast_shape(left_shape: &[usize], right_shape: &[usize]) -> Vec<usize> {
-    if is_debug() {
-        println!(
-            "[broadcast] Broadcasting shapes: {:?} and {:?}",
-            left_shape, right_shape
-        );
-    }
+pub fn broadcast_shape(left: &[usize], right: &[usize]) -> Vec<usize> {
+    let mut shape = Vec::new();
+    let max_rank = left.len().max(right.len());
 
-    // Get the maximum rank between the tensors
-    let max_rank = std::cmp::max(left_shape.len(), right_shape.len());
-    let mut result = Vec::with_capacity(max_rank);
-
-    // Iterate from the trailing dimension
     for i in 0..max_rank {
-        let left_idx = left_shape.len().saturating_sub(i + 1);
-        let right_idx = right_shape.len().saturating_sub(i + 1);
+        let l = *left.get(left.len().wrapping_sub(i + 1)).unwrap_or(&1);
+        let r = *right.get(right.len().wrapping_sub(i + 1)).unwrap_or(&1);
 
-        // Get dimensions (defaulting to 1 for missing dimensions)
-        let left_dim = if left_idx < left_shape.len() {
-            left_shape[left_idx]
-        } else {
-            1
-        };
-        let right_dim = if right_idx < right_shape.len() {
-            right_shape[right_idx]
-        } else {
-            1
-        };
-
-        // Apply broadcasting rule - dimensions must be equal or one of them must be 1
-        if left_dim == right_dim || left_dim == 1 || right_dim == 1 {
-            let broadcast_dim = std::cmp::max(left_dim, right_dim);
-            result.push(broadcast_dim);
-
-            if is_debug() {
-                println!(
-                    "  Dimension {}: {} vs {} -> broadcasted to {}",
-                    max_rank - i - 1,
-                    left_dim,
-                    right_dim,
-                    broadcast_dim
-                );
-            }
+        if l == r || l == 1 || r == 1 {
+            shape.push(l.max(r));
         } else {
             panic!(
-                "Cannot broadcast shapes {:?} and {:?} - incompatible dimensions {} and {}",
-                left_shape, right_shape, left_dim, right_dim
+                "Cannot broadcast shapes {:?} and {:?}: incompatible dimensions {} and {}",
+                left, right, l, r
             );
         }
     }
 
-    // Reverse the result to get correct ordering (we processed from trailing dimension)
-    result.reverse();
-
-    if is_debug() {
-        println!("[broadcast] Resulting broadcast shape: {:?}", result);
-    }
-
-    result
+    shape.reverse();
+    shape
 }

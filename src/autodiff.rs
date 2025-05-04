@@ -1,3 +1,4 @@
+use crate::broadcast::{broadcast_shape, resolve_broadcast_index, BroadcastIterator};
 use crate::is_debug;
 use crate::tensor::{Tensor, TensorRef};
 use crate::utils::topo_sort;
@@ -18,6 +19,19 @@ pub trait GradFn {
     fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>>;
 }
 
+fn unbroadcast_grads(
+    upstream_grad: &Vec<f32>,
+    out_shape: &Vec<usize>,
+    in_shape: &Vec<usize>,
+) -> Vec<f32> {
+    let mut grad = vec![0.0; in_shape.iter().product()];
+    for i in 0..upstream_grad.len() {
+        let j = resolve_broadcast_index(i, out_shape, in_shape);
+        grad[j] += upstream_grad[i];
+    }
+    grad
+}
+
 // ================ SUM OPERATION ==================
 pub struct SumBack {
     pub input_shape: Vec<usize>,
@@ -34,10 +48,112 @@ impl GradFn for SumBack {
 
 // ================ ADD OPERATION ==================
 
-pub struct AddBack;
+pub struct AddBack {
+    pub left_shape: Vec<usize>,
+    pub right_shape: Vec<usize>,
+    pub out_shape: Vec<usize>,
+}
 impl GradFn for AddBack {
     fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
-        vec![upstream_grad.clone(), upstream_grad.clone()]
+        let left_grad = unbroadcast_grads(upstream_grad, &self.out_shape, &self.left_shape);
+        let right_grad = unbroadcast_grads(upstream_grad, &self.out_shape, &self.right_shape);
+
+        vec![left_grad, right_grad]
+    }
+}
+
+// ================ SUBSTRACT OPERATION ==================
+
+pub struct SubBack {
+    pub left_shape: Vec<usize>,
+    pub right_shape: Vec<usize>,
+    pub out_shape: Vec<usize>,
+}
+impl GradFn for SubBack {
+    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
+        // gradient of a subtraction is the same as addition,
+        // but the second input is negated
+        // f(x) = x - y
+        // df/dx = 1
+        // df/dy = -1
+        let left_grad = unbroadcast_grads(upstream_grad, &self.out_shape, &self.left_shape);
+        let right_grad = unbroadcast_grads(upstream_grad, &self.out_shape, &self.right_shape);
+
+        vec![left_grad, right_grad.iter().map(|x| -x).collect()]
+    }
+}
+
+// ================ MULTIPLY OPERATION ==================
+
+pub struct MulBack {
+    pub left: Rc<Tensor>,
+    pub right: Rc<Tensor>,
+    pub out_shape: Vec<usize>,
+}
+impl GradFn for MulBack {
+    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
+        // alkdjfa
+        // we first multiply the upstream gradient by the other input
+        let mut left_grad = Vec::new();
+        let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
+        while let Some((i, j)) = iter.next() {
+            left_grad.push(upstream_grad[i] * self.right.data[j]);
+        }
+
+        let mut right_grad = Vec::new();
+        let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.left.shape);
+        while let Some((i, j)) = iter.next() {
+            right_grad.push(upstream_grad[i] * self.left.data[j]);
+        }
+
+        // Unbroadcast the gradients
+        let left_grad = unbroadcast_grads(&left_grad, &self.out_shape, &self.left.shape);
+
+        let right_grad = unbroadcast_grads(&right_grad, &self.out_shape, &self.right.shape);
+
+        // Return the gradients
+        vec![left_grad, right_grad]
+    }
+}
+
+// ================ DIVIDE OPERATION ==================
+
+pub struct DivBack {
+    pub left: Rc<Tensor>,
+    pub right: Rc<Tensor>,
+    pub out_shape: Vec<usize>,
+}
+impl GradFn for DivBack {
+    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
+        // The gradient of the division is taking
+        // the output gradient times the other input
+
+        // f(x) = x / y
+        // df/dx = 1/y
+        // df/dy = -x/y^2
+        // First we do the operation broadcasted
+        let mut left_grad = Vec::new();
+        let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
+        while let Some((i, j)) = iter.next() {
+            left_grad.push(upstream_grad[i] / self.right.data[j]);
+        }
+
+        let mut right_grad = Vec::new();
+        let mut iter_l = BroadcastIterator::new_with_shapes(&self.out_shape, &self.left.shape);
+        let mut iter_r = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
+
+        while let (Some((i_l, j_l)), Some((_, j_r))) = (iter_l.next(), iter_r.next()) {
+            let l = self.left.data[j_l];
+            let r = self.right.data[j_r];
+            right_grad.push(-upstream_grad[i_l] * l / (r * r));
+        }
+
+        // Unbroadcast the gradients
+        let left_grad = unbroadcast_grads(&left_grad, &self.out_shape, &self.left.shape);
+        let right_grad = unbroadcast_grads(&right_grad, &self.out_shape, &self.right.shape);
+
+        // Return the gradients
+        vec![left_grad, right_grad]
     }
 }
 
@@ -72,87 +188,6 @@ impl GradFn for MMBack {
         let grad_right = left.mm(&grads_tensor);
 
         return vec![grad_left.data.clone(), grad_right.data.clone()];
-    }
-}
-
-// ================ SUBSTRACT OPERATION ==================
-
-pub struct SubBack;
-impl GradFn for SubBack {
-    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
-        // gradient of a subtraction is the same as addition,
-        // but the second input is negated
-        // f(x) = x - y
-        // df/dx = 1
-        // df/dy = -1
-        vec![
-            upstream_grad.clone(),
-            upstream_grad.iter().map(|x| -x).collect(),
-        ]
-    }
-}
-
-// ================ MULTIPLY OPERATION ==================
-
-pub struct MulBack {
-    pub left: Rc<Tensor>,
-    pub right: Rc<Tensor>,
-}
-impl GradFn for MulBack {
-    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
-        // println!("[Mulback] Backward called with upstream_grad: {:?}", upstream_grad);
-        // The gradient of the product is taking the output gradient times the other input
-        // f(x) = x * y
-        // df/dx = y
-        // df/dy = x
-
-        // grad left takes the right data
-        let grad_left: Vec<f32> = upstream_grad
-            .iter()
-            .zip(self.right.data.iter())
-            .map(|(grad, rightdata)| grad * rightdata)
-            .collect();
-
-        // grad right takes the left data
-        let grad_right: Vec<f32> = upstream_grad
-            .iter()
-            .zip(self.left.data.iter())
-            .map(|(grad, leftdata)| grad * leftdata)
-            .collect();
-
-        vec![grad_left, grad_right]
-    }
-}
-
-// ================ DIVIDE OPERATION ==================
-
-pub struct DivBack {
-    pub left: Rc<Tensor>,
-    pub right: Rc<Tensor>,
-}
-impl GradFn for DivBack {
-    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
-        // The gradient of the division is taking
-        // the output gradient times the other input
-
-        // f(x) = x / y
-        // df/dx = 1/y
-        // df/dy = -x/y^2
-
-        let grad_left: Vec<f32> = upstream_grad
-            .iter()
-            .zip(self.right.data.iter())
-            .map(|(grad, rightdata)| grad / rightdata)
-            .collect();
-
-        let grad_right: Vec<f32> = upstream_grad
-            .iter()
-            .zip(self.left.data.iter())
-            .zip(self.right.data.iter())
-            .map(|((grad, l), r)| -grad * l / (r * r))
-            .collect();
-
-        vec![grad_left, grad_right]
     }
 }
 

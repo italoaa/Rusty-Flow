@@ -3,6 +3,8 @@ use crate::autodiff::{
     AddBack, CrossEntropyBack, CrossEntropyLogitsBack, DivBack, MMBack, MSEBack, MulBack, ReLUBack,
     SoftmaxBack, SubBack, SumBack,
 };
+use crate::broadcast::{broadcast_shape, BroadcastIterator};
+use crate::is_debug;
 use crate::tensor::{Tensor, TensorRef};
 use std::{
     cell::RefCell,
@@ -18,13 +20,15 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
     type Output = TensorRef;
 
     fn add(self, other: &'b TensorRef) -> TensorRef {
-        assert_eq!(self.shape, other.shape, "Shape mismatch for addition");
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a + b)
-            .collect();
+        if is_debug() {
+            println!("[add] Adding tensors {:?} and {:?}", self, other);
+        }
+
+        let mut data: Vec<f32> = Vec::new();
+        let mut iter = BroadcastIterator::new(&self, &other);
+        while let Some((i, j)) = iter.next() {
+            data.push(self.data[i] + other.data[j]);
+        }
 
         let requires_grad = self.requires_grad || other.requires_grad;
 
@@ -33,12 +37,18 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
         // println!("[add] New has parents: {:?}", parents);
 
         let grad_fn = if requires_grad {
-            Some(Rc::new(AddBack) as Rc<dyn GradFn>)
+            Some(Rc::new(AddBack {
+                left_shape: self.shape.clone(),
+                right_shape: other.shape.clone(),
+                out_shape: broadcast_shape(&self.shape, &other.shape),
+            }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+        let output_shape = broadcast_shape(&self.shape, &other.shape);
+
+        Tensor::new_with_options(data, output_shape, requires_grad, grad_fn, parents)
     }
 }
 
@@ -48,25 +58,33 @@ impl<'a, 'b> Sub<&'b TensorRef> for &'a TensorRef {
     type Output = TensorRef;
 
     fn sub(self, other: &'b TensorRef) -> TensorRef {
-        assert_eq!(self.shape, other.shape);
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a - b)
-            .collect();
+        if is_debug() {
+            println!("[sub] Subtracting tensors {:?} and {:?}", self, other);
+        }
+
+        let mut data: Vec<f32> = Vec::new();
+        let mut iter = BroadcastIterator::new(&self, &other);
+        while let Some((i, j)) = iter.next() {
+            data.push(self.data[i] - other.data[j]);
+        }
 
         let requires_grad = self.requires_grad || other.requires_grad;
 
         let grad_fn = if requires_grad {
-            Some(Rc::new(SubBack) as Rc<dyn GradFn>)
+            Some(Rc::new(SubBack {
+                left_shape: self.shape.clone(),
+                right_shape: other.shape.clone(),
+                out_shape: broadcast_shape(&self.shape, &other.shape),
+            }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
         let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
 
-        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+        let output_shape = broadcast_shape(&self.shape, &other.shape);
+
+        Tensor::new_with_options(data, output_shape, requires_grad, grad_fn, parents)
     }
 }
 
@@ -76,17 +94,15 @@ impl<'a, 'b> Mul<&'b TensorRef> for &'a TensorRef {
     type Output = TensorRef;
 
     fn mul(self, other: &'b TensorRef) -> TensorRef {
-        assert_eq!(
-            self.shape, other.shape,
-            "Shape mismatch for elementwise multiplication"
-        );
+        if is_debug() {
+            println!("[mul] Multiplying tensors {:?} and {:?}", self, other);
+        }
 
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a * b)
-            .collect::<Vec<_>>();
+        let mut data: Vec<f32> = Vec::new();
+        let mut iter = BroadcastIterator::new(&self, &other);
+        while let Some((i, j)) = iter.next() {
+            data.push(self.data[i] * other.data[j]);
+        }
 
         let requires_grad = self.requires_grad || other.requires_grad;
 
@@ -94,14 +110,16 @@ impl<'a, 'b> Mul<&'b TensorRef> for &'a TensorRef {
             Some(Rc::new(MulBack {
                 left: self.0.clone(),
                 right: other.0.clone(),
+                out_shape: broadcast_shape(&self.shape, &other.shape),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
-
         let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
 
-        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+        let output_shape = broadcast_shape(&self.shape, &other.shape);
+
+        Tensor::new_with_options(data, output_shape, requires_grad, grad_fn, parents)
     }
 }
 
@@ -111,17 +129,18 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
     type Output = TensorRef;
 
     fn div(self, other: &'b TensorRef) -> TensorRef {
-        assert_eq!(
-            self.shape, other.shape,
-            "Shape mismatch for elementwise division"
-        );
+        if is_debug() {
+            println!("[div] Dividing tensors {:?} and {:?}", self, other);
+        }
 
-        let data = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a / b)
-            .collect::<Vec<_>>();
+        let mut data: Vec<f32> = Vec::new();
+        let mut iter = BroadcastIterator::new(&self, &other);
+        while let Some((i, j)) = iter.next() {
+            if other.data[j] == 0.0 {
+                panic!("Division by zero");
+            }
+            data.push(self.data[i] / other.data[j]);
+        }
 
         let requires_grad = self.requires_grad || other.requires_grad;
 
@@ -129,6 +148,7 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
             Some(Rc::new(DivBack {
                 left: self.0.clone(),
                 right: other.0.clone(),
+                out_shape: broadcast_shape(&self.shape, &other.shape),
             }) as Rc<dyn GradFn>)
         } else {
             None
@@ -136,7 +156,9 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
 
         let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
 
-        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+        let output_shape = broadcast_shape(&self.shape, &other.shape);
+
+        Tensor::new_with_options(data, output_shape, requires_grad, grad_fn, parents)
     }
 }
 
@@ -144,7 +166,12 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
 
 impl TensorRef {
     pub fn sum(&self) -> TensorRef {
+        // Sum the tensor along the specified dimension.
+        // Example: sum([1, 2, 3], dim=0) = 6
+        // Example: sum([[1, 2], [3, 4]], dim=0) = [4, 6]
+        // Example: sum([[1, 2], [3, 4]], dim=1) = [3, 7]
         let sum_val = self.data.iter().sum();
+
         // If no grads needed, just return plain leaf tensor
         if !self.requires_grad {
             return Tensor::new(vec![sum_val], vec![1]);
@@ -182,20 +209,42 @@ impl TensorRef {
 
 impl TensorRef {
     pub fn mm(&self, other: &TensorRef) -> TensorRef {
-        assert!(self.shape.len() < 3, "3d mm is not implemented");
+        let m = self.shape[self.shape.len() - 2];
+        let k = self.shape[self.shape.len() - 1];
+        let n = other.shape[other.shape.len() - 1];
         assert_eq!(
-            self.shape[1], other.shape[0],
+            k,
+            other.shape[other.shape.len() - 2],
             "Incompatible shapes for matrix multiplication"
         );
 
-        let mut result = vec![0.0; self.shape[0] * other.shape[1]];
+        let left_batch = &self.shape[..self.shape.len() - 2];
+        let right_batch = &other.shape[..other.shape.len() - 2];
+        let out_batch = broadcast_shape(left_batch, right_batch);
 
-        // assumes row-major order
-        for i in 0..self.shape[0] {
-            for j in 0..other.shape[1] {
-                for k in 0..self.shape[1] {
-                    result[i * other.shape[1] + j] +=
-                        self.data[i * self.shape[1] + k] * other.data[k * other.shape[1] + j];
+        let mut output_shape = out_batch.clone();
+        output_shape.push(m);
+        output_shape.push(n);
+
+        let mut result = Vec::with_capacity(output_shape.iter().product());
+
+        let mut iter = BroadcastIterator::new_with_shapes(left_batch, right_batch);
+
+        // Iterate over the batches
+        while let Some((i, j)) = iter.next() {
+            let left_batch_offset = i * m * k;
+            let right_batch_offset = j * k * n;
+
+            // Perform matrix multiplication for this batch
+            for row in 0..m {
+                for col in 0..n {
+                    let mut sum = 0.0;
+                    for idx in 0..k {
+                        let left_idx = left_batch_offset + row * k + idx;
+                        let right_idx = right_batch_offset + idx * n + col;
+                        sum += self.data[left_idx] * other.data[right_idx];
+                    }
+                    result.push(sum);
                 }
             }
         }
@@ -213,13 +262,7 @@ impl TensorRef {
 
         let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
 
-        Tensor::new_with_options(
-            result,
-            vec![self.shape[0], other.shape[1]],
-            requires_grad,
-            grad_fn,
-            parents,
-        )
+        Tensor::new_with_options(result, output_shape, requires_grad, grad_fn, parents)
     }
 }
 
