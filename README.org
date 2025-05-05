@@ -1,6 +1,6 @@
 #+title: Rusty flow
 
-* TODO batch mm backwards
+* DONE batch mm backwards
 2d works but batched mm is not tested explicitly
 
 * TODO dim arg for the reductions and activations
