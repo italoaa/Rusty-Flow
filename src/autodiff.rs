@@ -162,6 +162,7 @@ impl GradFn for DivBack {
 pub struct MMBack {
     pub left: Rc<Tensor>,
     pub right: Rc<Tensor>,
+    pub out_shape: Vec<usize>,
 }
 
 impl GradFn for MMBack {
@@ -175,19 +176,57 @@ impl GradFn for MMBack {
 
         // left is m, n
         // right is n, p
-        // upstream_grad is m, p
+        let m = self.left.shape[self.left.shape.len() - 2];
+        let n = self.left.shape[self.left.shape.len() - 1];
+        let p = self.right.shape[self.right.shape.len() - 1];
 
-        let m = self.left.shape[0];
-        let p = self.right.shape[1];
-        let right = self.right.transpose();
-        let left = self.left.transpose();
+        let left_batch_shape = &self.left.shape[..self.left.shape.len() - 2];
+        let right_batch_shape = &self.right.shape[..self.right.shape.len() - 2];
+        let out_batch_shape = &self.out_shape[..self.out_shape.len() - 2];
 
-        let grads_tensor = Tensor::new(upstream_grad.clone(), vec![m, p]);
+        // Create broadcast iterators for left and right tensors
+        let mut iter_l = BroadcastIterator::new_with_shapes(&out_batch_shape, &left_batch_shape);
+        let mut iter_r = BroadcastIterator::new_with_shapes(&out_batch_shape, &right_batch_shape);
 
-        let grad_left = grads_tensor.mm(&right);
-        let grad_right = left.mm(&grads_tensor);
+        // Results
+        let mut left_grad_accum = vec![0.0; self.left.data.len()];
+        let mut right_grad_accum = vec![0.0; self.right.data.len()];
 
-        return vec![grad_left.data.clone(), grad_right.data.clone()];
+        // Iterate over the batch dimensions
+        while let (Some((i_out, i_left)), Some((_, i_right))) = (iter_l.next(), iter_r.next()) {
+            // Batch offsets
+            let left_batch_offset = i_left * m * n;
+            let right_batch_offset = i_right * n * p;
+            let out_batch_offset = i_out * m * p;
+
+            let upstream_grad_batch = &upstream_grad[out_batch_offset..out_batch_offset + m * p];
+            let left_batch = &self.left.data[left_batch_offset..left_batch_offset + m * n];
+            let right_batch = &self.right.data[right_batch_offset..right_batch_offset + n * p];
+
+            let upstream_grad_tensor = Tensor::new(upstream_grad_batch.to_vec(), vec![m, p]);
+            let left_batch_tensor = Tensor::new(left_batch.to_vec(), vec![m, n]);
+            let right_batch_tensor = Tensor::new(right_batch.to_vec(), vec![n, p]);
+
+            // Perform backprop for a single example
+            let left_grad_batch = upstream_grad_tensor.mm(&right_batch_tensor.transpose());
+            let right_grad_batch = left_batch_tensor.transpose().mm(&upstream_grad_tensor);
+
+            // We are still in broadcasted space, so we need to unbroadcast
+            let left_grad =
+                unbroadcast_grads(&left_grad_batch.data, &self.out_shape, &self.left.shape);
+            let right_grad =
+                unbroadcast_grads(&right_grad_batch.data, &self.out_shape, &self.right.shape);
+
+            // Add the gradients to the output
+            for i in 0..left_grad.len() {
+                left_grad_accum[i + left_batch_offset] += left_grad[i];
+            }
+            for i in 0..right_grad.len() {
+                right_grad_accum[i + right_batch_offset] += right_grad[i];
+            }
+        }
+
+        vec![left_grad_accum, right_grad_accum]
     }
 }
 

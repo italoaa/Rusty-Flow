@@ -209,6 +209,11 @@ impl TensorRef {
 
 impl TensorRef {
     pub fn mm(&self, other: &TensorRef) -> TensorRef {
+        assert!(
+            self.shape.len() >= 2 && other.shape.len() >= 2,
+            "Matrix multiplication requires at least 2D tensors"
+        );
+
         let m = self.shape[self.shape.len() - 2];
         let k = self.shape[self.shape.len() - 1];
         let n = other.shape[other.shape.len() - 1];
@@ -255,6 +260,7 @@ impl TensorRef {
                 // expects Rc<tensor>
                 left: self.0.clone(),
                 right: other.0.clone(),
+                out_shape: output_shape.clone(),
             }) as Rc<dyn GradFn>)
         } else {
             None
@@ -498,37 +504,6 @@ impl TensorRef {
             parents,
         )
     }
-
-    // // Softmax function
-    // pub fn softmax(&self) -> TensorRef {
-    //     // s(x) = exp(x) / sum(exp(x))
-    //     let max_val = self.data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    //     let exp_data: Vec<f32> = self.data.iter().map(|&x| (x - max_val).exp()).collect();
-    //     let sum_exp: f32 = exp_data.iter().sum();
-    //     let softmax_data: Vec<f32> = exp_data.iter().map(|&x| x / sum_exp).collect();
-
-    //     let requires_grad = self.requires_grad;
-
-    //     let grad_fn = if requires_grad {
-    //         Some(Rc::new(SoftmaxBack {
-    //             output: Tensor::new(softmax_data.clone(), self.shape.clone())
-    //                 .0
-    //                 .clone(),
-    //         }) as Rc<dyn GradFn>)
-    //     } else {
-    //         None
-    //     };
-
-    //     let parents = vec![Rc::downgrade(&self.0)];
-
-    //     Tensor::new_with_options(
-    //         softmax_data,
-    //         self.shape.clone(),
-    //         requires_grad,
-    //         grad_fn,
-    //         parents,
-    //     )
-    // }
 }
 
 // ================== Loss Functions ==================

@@ -16,7 +16,21 @@ mod others {
         );
 
         let softmax = a.softmax(1);
-        println!("Softmax: {:?}", softmax);
+        let expected = Tensor::new(
+            vec![
+                0.0021, 0.0021, 0.0158, 0.0158, 0.1171, 0.1171, 0.8650, 0.8650, 0.0021, 0.0021,
+                0.0158, 0.0158, 0.1171, 0.1171, 0.8650, 0.8650,
+            ],
+            vec![2, 4, 2],
+        );
+
+        // Check if the softmax is correct
+        assert!(
+            softmax.approx_eq(&expected, 1e-4),
+            "Expected: {:?}, Got: {:?}",
+            expected,
+            softmax
+        );
     }
 
     #[test]

@@ -84,6 +84,7 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
             let result = a.mean();
             result.backward();
+
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
             assert_eq!(agrad, &vec![1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0]);
