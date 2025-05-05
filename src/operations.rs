@@ -327,6 +327,12 @@ impl TensorRef {
 
     // Calculates the cross entropy between two distributions
     pub fn cross_entropy(&self, target: &TensorRef) -> TensorRef {
+        // Only accepts 2d shapes
+        // the first is batch and second is the
+        // probability of each class
+
+        // NOTE: it only accepts one-hot encoded vecs
+
         // Check shapes: must match exactly
         assert_eq!(self.shape, target.shape);
 
@@ -426,7 +432,8 @@ impl TensorRef {
         }
 
         // First, apply softmax to the input tensor
-        let self_softmax = self.softmax();
+        let last_dim = self.shape.len() - 1;
+        let self_softmax = self.softmax(last_dim);
 
         // Calculate cross-entropy: same for both cases
         let data = self_softmax
@@ -451,20 +458,31 @@ impl TensorRef {
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
 
-    // Softmax function
-    pub fn softmax(&self) -> TensorRef {
-        let max_val = self.data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let exp_data: Vec<f32> = self.data.iter().map(|&x| (x - max_val).exp()).collect();
-        let sum_exp: f32 = exp_data.iter().sum();
-        let softmax_data: Vec<f32> = exp_data.iter().map(|&x| x / sum_exp).collect();
+    // on a dim
+    pub fn softmax(&self, dim: usize) -> TensorRef {
+        let mut output_data = vec![0.0; self.data.len()];
+
+        for indices in self.iterate_over_dim_indices(dim) {
+            let group: Vec<f32> = indices.iter().map(|&i| self.data[i]).collect();
+
+            let max_val = group.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            let exps: Vec<f32> = group.iter().map(|&x| (x - max_val).exp()).collect();
+            let sum_exps: f32 = exps.iter().sum();
+            let softmax_group: Vec<f32> = exps.into_iter().map(|x| x / sum_exps).collect();
+
+            for (&index, &value) in indices.iter().zip(softmax_group.iter()) {
+                output_data[index] = value;
+            }
+        }
 
         let requires_grad = self.requires_grad;
 
         let grad_fn = if requires_grad {
             Some(Rc::new(SoftmaxBack {
-                output: Tensor::new(softmax_data.clone(), self.shape.clone())
+                output: Tensor::new(output_data.clone(), self.shape.clone())
                     .0
                     .clone(),
+                dim,
             }) as Rc<dyn GradFn>)
         } else {
             None
@@ -473,13 +491,44 @@ impl TensorRef {
         let parents = vec![Rc::downgrade(&self.0)];
 
         Tensor::new_with_options(
-            softmax_data,
+            output_data,
             self.shape.clone(),
             requires_grad,
             grad_fn,
             parents,
         )
     }
+
+    // // Softmax function
+    // pub fn softmax(&self) -> TensorRef {
+    //     // s(x) = exp(x) / sum(exp(x))
+    //     let max_val = self.data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    //     let exp_data: Vec<f32> = self.data.iter().map(|&x| (x - max_val).exp()).collect();
+    //     let sum_exp: f32 = exp_data.iter().sum();
+    //     let softmax_data: Vec<f32> = exp_data.iter().map(|&x| x / sum_exp).collect();
+
+    //     let requires_grad = self.requires_grad;
+
+    //     let grad_fn = if requires_grad {
+    //         Some(Rc::new(SoftmaxBack {
+    //             output: Tensor::new(softmax_data.clone(), self.shape.clone())
+    //                 .0
+    //                 .clone(),
+    //         }) as Rc<dyn GradFn>)
+    //     } else {
+    //         None
+    //     };
+
+    //     let parents = vec![Rc::downgrade(&self.0)];
+
+    //     Tensor::new_with_options(
+    //         softmax_data,
+    //         self.shape.clone(),
+    //         requires_grad,
+    //         grad_fn,
+    //         parents,
+    //     )
+    // }
 }
 
 // ================== Loss Functions ==================

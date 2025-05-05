@@ -151,7 +151,7 @@ mod backward {
             );
             for i in 0..3 {
                 let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-                let soft = a.softmax();
+                let soft = a.softmax(0);
                 let vecmask = if i == 0 {
                     vec![1.0, 0.0, 0.0]
                 } else if i == 1 {

@@ -95,7 +95,7 @@ mod ops {
     #[test]
     fn test_softmax() {
         let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let result = a.softmax();
+        let result = a.softmax(0);
         let expected = Tensor::new(vec![0.0900, 0.2447, 0.6652], vec![3]);
         let mse = a.mse(&expected);
         for i in 0..result.data.len() {

@@ -261,6 +261,7 @@ impl GradFn for CrossEntropyBack {
 // ================ SOFTMAX ==================
 pub struct SoftmaxBack {
     pub output: Rc<Tensor>,
+    pub dim: usize,
 }
 
 impl GradFn for SoftmaxBack {
@@ -270,20 +271,24 @@ impl GradFn for SoftmaxBack {
         // dL/dxi = SUM_j(dL/dsj * dsj/dxi)
         // we can simplify this to
         // dL/dxi = si * (dL/dsi - SUM_j(dL/dsj * sj))
-        let s = &self.output.data; // softmax output
 
-        // Compute dot(s, upstream_grad)
-        let dot = s
-            .iter()
-            .zip(upstream_grad.iter())
-            .map(|(si, gi)| si * gi)
-            .sum::<f32>();
+        let s = &self.output.data;
+        let mut grad_input = vec![0.0; s.len()];
 
-        let grad_input: Vec<f32> = s
-            .iter()
-            .zip(upstream_grad.iter())
-            .map(|(si, gi)| si * (gi - dot))
-            .collect();
+        for indices in self.output.iterate_over_dim_indices(self.dim) {
+            let s_slice: Vec<f32> = indices.iter().map(|&i| s[i]).collect();
+            let upstream_slice: Vec<f32> = indices.iter().map(|&i| upstream_grad[i]).collect();
+
+            let dot: f32 = s_slice
+                .iter()
+                .zip(upstream_slice.iter())
+                .map(|(si, gi)| si * gi)
+                .sum();
+
+            for (i, idx) in indices.into_iter().enumerate() {
+                grad_input[idx] = s_slice[i] * (upstream_slice[i] - dot);
+            }
+        }
 
         vec![grad_input]
     }

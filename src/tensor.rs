@@ -164,6 +164,10 @@ impl Tensor {
             self.parents.clone(),
         )
     }
+
+    pub fn numel(&self) -> usize {
+        self.shape.iter().product()
+    }
 }
 
 impl PartialEq for Tensor {
@@ -193,14 +197,127 @@ impl Tensor {
     }
 }
 
+impl Tensor {
+    pub fn iterate_over_dim<'a>(&'a self, dim: usize) -> impl Iterator<Item = Vec<f32>> + 'a {
+        let shape = &self.shape;
+        let strides = &self.strides;
+        let data = &self.data;
+
+        // Calculate the number of iterations needed for each dimension except `dim`
+        let num_iterations: usize = shape
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| i != dim)
+            .map(|(_, &size)| size)
+            .product();
+
+        // Generate the indices for each iteration
+        (0..num_iterations).map(move |i| {
+            // Calculate the starting index for the current iteration
+            let mut index = 0;
+            let mut remaining = i;
+            for (j, &stride) in strides.iter().enumerate().rev() {
+                if j != dim {
+                    let size = shape[j];
+                    let pos = remaining % size;
+                    index += pos * stride;
+                    remaining /= size;
+                }
+            }
+
+            // Collect the values along the specified dimension
+            (0..shape[dim])
+                .map(move |k| data[index + k * strides[dim]])
+                .collect()
+        })
+    }
+
+    pub fn iterate_over_dim_indices<'a>(
+        &'a self,
+        dim: usize,
+    ) -> impl Iterator<Item = Vec<usize>> + 'a {
+        let shape = &self.shape;
+        let strides = &self.strides;
+
+        // Calculate the number of iterations needed for each dimension except `dim`
+        let num_iterations: usize = shape
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| i != dim)
+            .map(|(_, &size)| size)
+            .product();
+
+        // Generate the indices for each iteration
+        (0..num_iterations).map(move |i| {
+            let mut index = 0;
+            let mut remaining = i;
+            for (j, &stride) in strides.iter().enumerate() {
+                if j != dim {
+                    let size = shape[j];
+                    let pos = remaining % size;
+                    index += pos * stride;
+                    remaining /= size;
+                }
+            }
+
+            // Generate indices along the specified dimension
+            (0..shape[dim])
+                .map(move |k| index + k * strides[dim])
+                .collect()
+        })
+    }
+}
+
 impl fmt::Debug for Tensor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Tensor")
-            .field("data", &self.data)
-            .field("shape", &self.shape)
-            .field("grad", &self.grad.borrow())
-            .field("requires_grad", &self.requires_grad)
-            .field("parents", &self.parents)
-            .finish()
+        // Helper function to recursively format the tensor's data
+        fn format_data(data: &[f32], shape: &[usize], indent: usize) -> String {
+            match shape.len() {
+                0 => "".to_string(), // Empty tensor
+                1 => {
+                    // 1D tensor: display as a row
+                    let elements: Vec<String> = data.iter().map(|x| format!("{:.4}", x)).collect();
+                    format!("[{}]", elements.join(", "))
+                }
+                _ => {
+                    // nD tensor: recursively format sub-tensors
+                    let chunk_size = shape[1..].iter().product();
+                    let mut result = String::new();
+                    result.push_str(&format!("[\n"));
+                    for (i, chunk) in data.chunks(chunk_size).enumerate() {
+                        result.push_str(&" ".repeat(indent + 2));
+                        result.push_str(&format_data(chunk, &shape[1..], indent + 2));
+                        if i < data.chunks(chunk_size).count() - 1 {
+                            result.push_str(",\n");
+                        }
+                    }
+                    result.push_str(&format!("\n{}]", " ".repeat(indent)));
+                    result
+                }
+            }
+        }
+
+        // Format the tensor's data
+        let data_str = format_data(&self.data, &self.shape, 0);
+
+        // Format the other fields
+        let grad_str = if let Some(grad) = self.grad.borrow().as_ref() {
+            format!("\n  grad: {:?}", grad)
+        } else {
+            String::new()
+        };
+
+        let parents_str = if !self.parents.is_empty() {
+            format!("\n  parents: {:?}", self.parents)
+        } else {
+            String::new()
+        };
+
+        // Combine all fields into a single output
+        write!(
+            f,
+            "Tensor(\n  data: {},\n  shape: {:?},\n  requires_grad: {}{}{}\n)",
+            data_str, self.shape, self.requires_grad, grad_str, parents_str
+        )
     }
 }

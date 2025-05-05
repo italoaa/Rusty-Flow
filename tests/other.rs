@@ -5,6 +5,44 @@ use rflow::tensor::{Tensor, TensorRef};
 mod others {
     use super::*;
 
+    #[test]
+    fn test_softmaxv2() {
+        let a = Tensor::new(
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0,
+            ],
+            vec![2, 4, 2],
+        );
+
+        let softmax = a.softmax(1);
+        println!("Softmax: {:?}", softmax);
+    }
+
+    #[test]
+    fn test_iter_over_dim() {
+        // 16 elements
+        let a = Tensor::new(
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0,
+            ],
+            vec![2, 4, 2],
+        );
+
+        // Iterate over the first dimension
+        //
+        let mut iter = a.iterate_over_dim(2).enumerate();
+        // print each element
+        let expected: Vec<f32> = vec![1., 5., 9., 13., 17., 21., 25., 29.];
+        while let Some((i, group)) = iter.next() {
+            // print the sum of the group
+            let sum: f32 = group.iter().sum();
+            // println!("Group {}: {:?} => Sum: {}", i, group, sum);
+            assert_eq!(sum, expected[i]);
+        }
+    }
+
     /// The aim of these tests is to decompose trivial neural network operations to ensure
     /// that the basic building blocks are working correctly.
     mod nn {
@@ -18,11 +56,7 @@ mod others {
             let w1: TensorRef = Tensor::new(vec![1., 2., 3., 4., 5., 6.], vec![3, 2]);
             let b1: TensorRef = Tensor::new(vec![1., 1.], vec![2, 1]);
 
-            // IN = 2, 3
-            // HIDDEN = 2, 2
-            // OUT = 2, 2
-
-            let w2: TensorRef = Tensor::new(vec![1., 2.], vec![2, 1]);
+            let w2: TensorRef = Tensor::new(vec![1., 2., 3., 4.], vec![2, 2]);
             let b2: TensorRef = Tensor::new(vec![1., 1.], vec![2, 1]);
 
             let hidden1 = inputs.mm(&w1);
@@ -33,16 +67,25 @@ mod others {
             let pre_activated2 = &hidden2 + &b2;
             let activated2 = pre_activated2.relu();
             // TODO: softmax needs a dim arg
-            let output = activated2.softmax();
-            // Print all the tensor steps
-            println!("Inputs: {:?}", inputs.data);
-            println!("Hidden1: {:?}", hidden1.data);
-            println!("Pre-activated1: {:?}", pre_activated1.data);
-            println!("Activated1: {:?}", activated1.data);
-            println!("Hidden2: {:?}", hidden2.data);
-            println!("Pre-activated2: {:?}", pre_activated2.data);
-            println!("Activated2: {:?}", activated2.data);
-            println!("Output: {:?}", output.data);
+            let output = activated2.softmax(1);
+            let target = Tensor::new(vec![1., 0., 0., 1.], vec![2, 2]);
+
+            // print all steps
+            println!("hidden1: {:?}", hidden1);
+            println!("pre_activated1: {:?}", pre_activated1);
+            println!("activated1: {:?}", activated1);
+            println!("hidden2: {:?}", hidden2);
+            println!("pre_activated2: {:?}", pre_activated2);
+            println!("activated2: {:?}", activated2);
+            println!("output: {:?}", output);
+            println!("target: {:?}", target);
+
+            let ce = output.cross_entropy(&target);
+            let loss = ce.mean();
+            println!("cross_entropy: {:?}", ce);
+            println!("loss: {:?}", loss);
+
+            assert_eq!(output.shape, vec![2, 2]);
         }
     }
 
