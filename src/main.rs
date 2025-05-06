@@ -169,7 +169,7 @@ fn main() {
         let xw2 = acts1.mm(&w2);
         let logits = &xw2 + &b2;
         let cross_entropy = logits.cross_entropy(&batch.labels);
-        let loss = cross_entropy.mean();
+        let loss = cross_entropy.mean(0);
         println!("Batch {}: Loss: {:?}", i, loss);
         loss.backward();
     }

@@ -7,14 +7,14 @@ mod reductions {
     #[test]
     fn test_sum() {
         let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let result = a.sum();
+        let result = a.sum(0);
         assert_eq!(result, Tensor::new(vec![6.0], vec![]));
     }
 
     #[test]
     fn test_mean() {
         let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-        let result = a.mean();
+        let result = a.mean(0);
         assert_eq!(result, Tensor::new(vec![2.0], vec![]));
     }
 }

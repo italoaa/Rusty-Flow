@@ -1,5 +1,6 @@
 use crate::autodiff;
 use crate::autodiff::GradFn;
+use crate::utils::{compute_strides, slices_along_dim};
 use rand::prelude::*;
 use rand_distr::StandardNormal;
 
@@ -19,6 +20,7 @@ pub struct Tensor {
     pub grad: RefCell<Option<Vec<f32>>>, // gradient of the tensor
     pub grad_fn: Option<Rc<dyn GradFn>>,
     pub parents: Vec<Weak<Tensor>>,
+    pub parentsStrong: Vec<Rc<Tensor>>,
 }
 
 pub struct TensorRef(pub Rc<Tensor>);
@@ -53,18 +55,6 @@ impl TensorRef {
     }
 }
 
-fn get_strides(shape: &Vec<usize>) -> Vec<usize> {
-    let mut strides = vec![0; shape.len()];
-    let mut stride = 1;
-
-    for i in (0..shape.len()).rev() {
-        strides[i] = stride;
-        stride *= shape[i];
-    }
-
-    strides
-}
-
 impl Tensor {
     pub fn new(data: Vec<f32>, shape: Vec<usize>) -> TensorRef {
         // accept scalars of shape []
@@ -91,6 +81,32 @@ impl Tensor {
         )
     }
 
+    pub fn new_with_options2(
+        data: Vec<f32>,
+        shape: Vec<usize>,
+        requires_grad: bool,
+        grad_fn: Option<Rc<dyn GradFn>>,
+        parentsStrong: Vec<Rc<Tensor>>,
+    ) -> TensorRef {
+        assert_eq!(
+            data.len(),
+            shape.iter().product(),
+            "Data size must match shape"
+        );
+        let strides = compute_strides(&shape);
+
+        TensorRef(Rc::new(Tensor {
+            data,
+            shape,
+            strides,
+            requires_grad,
+            grad: RefCell::new(None),
+            grad_fn,
+            parents: vec![],
+            parentsStrong,
+        }))
+    }
+
     // Full constructor
     pub fn new_with_options(
         data: Vec<f32>,
@@ -104,7 +120,7 @@ impl Tensor {
             shape.iter().product(),
             "Data size must match shape"
         );
-        let strides = get_strides(&shape);
+        let strides = compute_strides(&shape);
 
         TensorRef(Rc::new(Tensor {
             data,
@@ -114,6 +130,7 @@ impl Tensor {
             grad: RefCell::new(None),
             grad_fn,
             parents,
+            parentsStrong: vec![],
         }))
     }
 
@@ -199,72 +216,16 @@ impl Tensor {
 
 impl Tensor {
     pub fn iterate_over_dim<'a>(&'a self, dim: usize) -> impl Iterator<Item = Vec<f32>> + 'a {
-        let shape = &self.shape;
-        let strides = &self.strides;
         let data = &self.data;
-
-        // Calculate the number of iterations needed for each dimension except `dim`
-        let num_iterations: usize = shape
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| i != dim)
-            .map(|(_, &size)| size)
-            .product();
-
-        // Generate the indices for each iteration
-        (0..num_iterations).map(move |i| {
-            // Calculate the starting index for the current iteration
-            let mut index = 0;
-            let mut remaining = i;
-            for (j, &stride) in strides.iter().enumerate().rev() {
-                if j != dim {
-                    let size = shape[j];
-                    let pos = remaining % size;
-                    index += pos * stride;
-                    remaining /= size;
-                }
-            }
-
-            // Collect the values along the specified dimension
-            (0..shape[dim])
-                .map(move |k| data[index + k * strides[dim]])
-                .collect()
-        })
+        slices_along_dim(&self.shape, dim)
+            .map(move |indices| indices.into_iter().map(|i| data[i]).collect())
     }
 
     pub fn iterate_over_dim_indices<'a>(
         &'a self,
         dim: usize,
     ) -> impl Iterator<Item = Vec<usize>> + 'a {
-        let shape = &self.shape;
-        let strides = &self.strides;
-
-        // Calculate the number of iterations needed for each dimension except `dim`
-        let num_iterations: usize = shape
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| i != dim)
-            .map(|(_, &size)| size)
-            .product();
-
-        // Generate the indices for each iteration
-        (0..num_iterations).map(move |i| {
-            let mut index = 0;
-            let mut remaining = i;
-            for (j, &stride) in strides.iter().enumerate() {
-                if j != dim {
-                    let size = shape[j];
-                    let pos = remaining % size;
-                    index += pos * stride;
-                    remaining /= size;
-                }
-            }
-
-            // Generate indices along the specified dimension
-            (0..shape[dim])
-                .map(move |k| index + k * strides[dim])
-                .collect()
-        })
+        slices_along_dim(&self.shape, dim)
     }
 }
 

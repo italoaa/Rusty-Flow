@@ -1,7 +1,7 @@
 use crate::autodiff::GradFn;
 use crate::autodiff::{
-    AddBack, CrossEntropyBack, CrossEntropyLogitsBack, DivBack, MMBack, MSEBack, MulBack, ReLUBack,
-    SoftmaxBack, SubBack, SumBack,
+    AddBack, CrossEntropyBack, CrossEntropyLogitsBack, DivBack, MMBack, MSEBack, MeanBack, MulBack,
+    ReLUBack, SoftmaxBack, SubBack, SumBack,
 };
 use crate::broadcast::{broadcast_shape, BroadcastIterator};
 use crate::is_debug;
@@ -165,25 +165,55 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
 // ================ SUM OPERATION =========================
 
 impl TensorRef {
-    pub fn sum(&self) -> TensorRef {
+    pub fn sum(&self, dim: usize) -> TensorRef {
         // Sum the tensor along the specified dimension.
         // Example: sum([1, 2, 3], dim=0) = 6
         // Example: sum([[1, 2], [3, 4]], dim=0) = [4, 6]
         // Example: sum([[1, 2], [3, 4]], dim=1) = [3, 7]
-        let sum_val = self.data.iter().sum();
+        assert!(
+            dim < self.shape.len(),
+            "Dimension out of range. Tensor has {} dimensions, but {} was given.",
+            self.shape.len(),
+            dim
+        );
 
-        // If no grads needed, just return plain leaf tensor
-        if !self.requires_grad {
-            return Tensor::new(vec![sum_val], vec![1]);
+        let out_shape = self
+            .shape
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| i != dim)
+            .map(|(_, &s)| s)
+            .collect::<Vec<_>>();
+
+        let mut result = Vec::with_capacity(out_shape.iter().product());
+
+        for slice in self.iterate_over_dim(dim) {
+            let sum: f32 = slice.iter().sum();
+            result.push(sum);
         }
 
-        let grad_fn = Some(Rc::new(SumBack {
-            input_shape: self.shape.clone(),
-        }) as Rc<dyn GradFn>);
-        let parents = vec![Rc::downgrade(&self.0)];
+        let requires_grad = self.requires_grad;
 
-        // Construct a scalar tensor with grad_fn and parents
-        Tensor::new_with_options(vec![sum_val], vec![], true, grad_fn, parents)
+        let grad_fn = if requires_grad {
+            Some(Rc::new(SumBack {
+                input_shape: self.shape.clone(),
+                dim: dim,
+            }) as Rc<dyn GradFn>)
+        } else {
+            None
+        };
+
+        if is_debug() {
+            // Initial
+            println!("[sum] Initial tensor: {:?}", self);
+            println!("[sum] Sum result: {:?}", result);
+        }
+
+        let parents = vec![Rc::downgrade(&self.0)];
+        // let parentsStrong = vec![self.0.clone()];
+
+        // Tensor::new_with_options2(result.clone(), out_shape, true, grad_fn, parentsStrong)
+        Tensor::new_with_options(result.clone(), out_shape, true, grad_fn, parents)
     }
 }
 
@@ -195,13 +225,44 @@ impl TensorRef {
         self.requires_grad
     }
 
-    pub fn mean(&self) -> TensorRef {
-        let sum: TensorRef = self.sum();
-        // Divide by the number of elements
-        let len: usize = self.shape.iter().product();
-        // no broadcasting
-        let div = Tensor::new(vec![len as f32], vec![]);
-        &sum / &div
+    pub fn mean(&self, dim: usize) -> TensorRef {
+        assert!(
+            dim < self.shape.len(),
+            "Dimension out of range. Tensor has {} dimensions, but {} was given.",
+            self.shape.len(),
+            dim
+        );
+
+        let out_shape = self
+            .shape
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| i != dim)
+            .map(|(_, &s)| s)
+            .collect::<Vec<_>>();
+
+        let mut result = Vec::with_capacity(out_shape.iter().product());
+
+        for slice in self.iterate_over_dim(dim) {
+            let sum: f32 = slice.iter().sum();
+            let len: usize = slice.len();
+            result.push(sum / len as f32);
+        }
+
+        let requires_grad = self.requires_grad;
+
+        let grad_fn = if requires_grad {
+            Some(Rc::new(MeanBack {
+                input_shape: self.shape.clone(),
+                dim: dim,
+            }) as Rc<dyn GradFn>)
+        } else {
+            None
+        };
+
+        let parents = vec![Rc::downgrade(&self.0)];
+
+        Tensor::new_with_options(result.clone(), out_shape, requires_grad, grad_fn, parents)
     }
 }
 

@@ -95,7 +95,7 @@ mod others {
             println!("target: {:?}", target);
 
             let ce = output.cross_entropy(&target);
-            let loss = ce.mean();
+            let loss = ce.mean(0);
             println!("cross_entropy: {:?}", ce);
             println!("loss: {:?}", loss);
 
@@ -167,7 +167,8 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a + &b;
-                let d = c.sum();
+                let d = c.sum(0);
+                let e = d.sum(0);
                 d.backward();
                 // grad are refcelss of vecs
                 let a_grad = a.grad.borrow();
@@ -185,7 +186,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a - &b;
-                let d = c.sum();
+                let d = c.sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();
@@ -202,7 +203,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a * &b;
-                let d = c.sum();
+                let d = c.sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();
@@ -220,7 +221,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a / &b;
-                let d = c.sum();
+                let d = c.sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();

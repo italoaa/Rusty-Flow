@@ -14,7 +14,7 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
             let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
             let result = &a + &b;
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -29,7 +29,7 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
             let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
             let result = &a - &b;
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -44,7 +44,7 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
             let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
             let result = &a * &b;
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -59,7 +59,7 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
             let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
             let result = &a / &b;
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -72,9 +72,10 @@ mod backward {
         #[test]
         fn test_sum_back() {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-            let result = a.sum();
+            let result = a.sum(0);
             result.backward();
             let agrad = a.grad.borrow();
+            println!("agrad: {:?}", agrad);
             let agrad = agrad.as_ref().unwrap();
             assert_eq!(agrad, &vec![1.0, 1.0, 1.0]);
         }
@@ -82,7 +83,7 @@ mod backward {
         #[test]
         fn test_mean_back() {
             let a = Tensor::new(vec![1.0, 2.0, 3.0], vec![3]);
-            let result = a.mean();
+            let result = a.mean(0);
             result.backward();
 
             let agrad = a.grad.borrow();
@@ -95,7 +96,11 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]);
             let b = Tensor::new(vec![5.0, 6.0, 7.0, 8.0], vec![2, 2]);
             let result = a.mm(&b);
-            let sum = result.sum();
+            // TODO: We can't do result.sum(0).sum(0) because the intermediate result vanishes
+            // This needs to be fixed
+            let sum = result.sum(0).sum(0);
+            // let sum = result.sum(0);
+            // let sum = sum.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -109,7 +114,7 @@ mod backward {
         fn test_relu_back() {
             let a = Tensor::new(vec![-1.0, 2.0, -3.0, 4.0], vec![4]);
             let result = a.relu();
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -122,7 +127,7 @@ mod backward {
             // B is the target normally does not require grad
             let b = Tensor::new(vec![4.0, 5.0, 6.0], vec![3]);
             let result = a.mse(&b);
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -135,7 +140,7 @@ mod backward {
             // B is the target normally does not require grad
             let b = Tensor::new(vec![0.0, 1.0, 0.0], vec![3]);
             let result = a.cross_entropy(&b);
-            let sum = result.sum();
+            let sum = result.sum(0);
             sum.backward();
             let agrad = a.grad.borrow();
             let agrad = agrad.as_ref().unwrap();
@@ -162,7 +167,7 @@ mod backward {
                 };
                 let mask = Tensor::new(vecmask, vec![3]);
                 let masked = &soft * &mask;
-                let loss = masked.sum();
+                let loss = masked.sum(0);
                 loss.backward();
                 let agrad = a.grad.borrow();
                 let agrad = agrad.as_ref().unwrap();

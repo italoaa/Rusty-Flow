@@ -1,6 +1,7 @@
 use crate::broadcast::{broadcast_shape, resolve_broadcast_index, BroadcastIterator};
 use crate::is_debug;
 use crate::tensor::{Tensor, TensorRef};
+use crate::utils::slices_along_dim;
 use crate::utils::topo_sort;
 use std::rc::Rc;
 
@@ -35,14 +36,59 @@ fn unbroadcast_grads(
 // ================ SUM OPERATION ==================
 pub struct SumBack {
     pub input_shape: Vec<usize>,
+    pub dim: usize,
 }
 
 impl GradFn for SumBack {
     fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
-        // upstream_grad is scalar [1] (derivative of the loss wrt the sum)
-        // Return a vector of ones with the same shape as input, times upstream_grad[0]
-        let size = self.input_shape.iter().product();
-        vec![vec![upstream_grad[0]; size]]
+        // upstream_grad is scalar [1] for each slice (derivative of the loss wrt the sum)
+        let mut grad = vec![0.0; self.input_shape.iter().product()];
+
+        for (i, slice) in slices_along_dim(&self.input_shape, self.dim).enumerate() {
+            // the slice is a vec of flat indicies
+            for j in 0..slice.len() {
+                if grad[slice[j]] != 0.0 {
+                    panic!("[autodiff] This grad should not be set, the slicing of the tensor is not correct: data: {:?}, slice: {:?}", self.input_shape, slice);
+                }
+                grad[slice[j]] = upstream_grad[i];
+            }
+        }
+
+        // No need to unbroadcast the gradient, since we are already in the input space
+        vec![grad]
+    }
+}
+
+// ================ MEAN OPERATION ==================
+pub struct MeanBack {
+    pub input_shape: Vec<usize>,
+    pub dim: usize,
+}
+
+impl GradFn for MeanBack {
+    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
+        // upstream_grad is scalar [1] for each slice (derivative of the loss wrt the mean)
+        let mut grad = vec![0.0; self.input_shape.iter().product()];
+
+        // Number of elements along the specified dimension
+        let num_elements = self.input_shape[self.dim] as f32;
+
+        // Scale the upstream gradient by 1 / num_elements
+        let scale = 1.0 / num_elements;
+
+        // Iterate over slices along the specified dimension
+        for (i, slice) in slices_along_dim(&self.input_shape, self.dim).enumerate() {
+            for j in 0..slice.len() {
+                if grad[slice[j]] != 0.0 {
+                    panic!("[autodiff] This grad should not be set, the slicing of the tensor is not correct: data: {:?}, slice: {:?}", self.input_shape, slice);
+                }
+                // Propagate the scaled upstream gradient
+                grad[slice[j]] = upstream_grad[i] * scale;
+            }
+        }
+
+        // No need to unbroadcast the gradient, since we are already in the input space
+        vec![grad]
     }
 }
 
@@ -364,7 +410,10 @@ pub fn backward(tensor: &TensorRef) {
         tensor.requires_grad,
         "[autodiff] Tensor does not require grad"
     );
-    assert!(tensor.shape == vec![], "[autodiff] Tensor is not a scalar");
+    assert!(
+        tensor.shape == vec![],
+        "[autodiff] Called backward on non-scalar tensor"
+    );
     {
         let mut grad_ref = tensor.grad.borrow_mut();
         if grad_ref.is_none() {
@@ -392,6 +441,33 @@ pub fn backward(tensor: &TensorRef) {
 
                 // grad is the upstream gradient
                 let parent_grads = grad_fn.backward(grad);
+                // use the .parentsStrong to get the parents
+                // for (parent, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
+                //     if is_debug() {
+                //         println!(
+                //             "[autodiff]   - Parent: {:?} with grad {:?}",
+                //             parent, parent_new_grad
+                //         );
+                //     }
+                //     let mut parent_grad = parent.grad.borrow_mut();
+                //     match &mut *parent_grad {
+                //         Some(existing) => {
+                //             if is_debug() {
+                //                 println!("[autodiff]   - Existing grad: {:?}", existing);
+                //             }
+                //             for (e, n) in existing.iter_mut().zip(parent_new_grad) {
+                //                 *e += n;
+                //             }
+                //         }
+                //         None => {
+                //             if is_debug() {
+                //                 println!("[autodiff]   - Setting new grad: {:?}", parent_new_grad);
+                //             }
+                //             parent_grad.replace(parent_new_grad.clone());
+                //         }
+                //     }
+                // }
+
                 for (parent_weak, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
                     if is_debug() {
                         println!(
