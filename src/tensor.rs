@@ -19,8 +19,7 @@ pub struct Tensor {
     pub requires_grad: bool,
     pub grad: RefCell<Option<Vec<f32>>>, // gradient of the tensor
     pub grad_fn: Option<Rc<dyn GradFn>>,
-    pub parents: Vec<Weak<Tensor>>,
-    pub parentsStrong: Vec<Rc<Tensor>>,
+    pub parents: Vec<Rc<Tensor>>,
 }
 
 pub struct TensorRef(pub Rc<Tensor>);
@@ -81,39 +80,13 @@ impl Tensor {
         )
     }
 
-    pub fn new_with_options2(
-        data: Vec<f32>,
-        shape: Vec<usize>,
-        requires_grad: bool,
-        grad_fn: Option<Rc<dyn GradFn>>,
-        parentsStrong: Vec<Rc<Tensor>>,
-    ) -> TensorRef {
-        assert_eq!(
-            data.len(),
-            shape.iter().product(),
-            "Data size must match shape"
-        );
-        let strides = compute_strides(&shape);
-
-        TensorRef(Rc::new(Tensor {
-            data,
-            shape,
-            strides,
-            requires_grad,
-            grad: RefCell::new(None),
-            grad_fn,
-            parents: vec![],
-            parentsStrong,
-        }))
-    }
-
     // Full constructor
     pub fn new_with_options(
         data: Vec<f32>,
         shape: Vec<usize>,
         requires_grad: bool,
         grad_fn: Option<Rc<dyn GradFn>>,
-        parents: Vec<Weak<Tensor>>,
+        parents: Vec<Rc<Tensor>>,
     ) -> TensorRef {
         assert_eq!(
             data.len(),
@@ -130,7 +103,6 @@ impl Tensor {
             grad: RefCell::new(None),
             grad_fn,
             parents,
-            parentsStrong: vec![],
         }))
     }
 
@@ -207,9 +179,7 @@ impl Tensor {
     pub fn clear_grad(&self) {
         self.grad.replace(None);
         for parent in &self.parents {
-            if let Some(parent) = parent.upgrade() {
-                parent.clear_grad();
-            }
+            parent.clear_grad();
         }
     }
 }

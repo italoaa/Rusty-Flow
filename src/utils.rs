@@ -30,7 +30,7 @@ pub fn slices_along_dim(shape: &[usize], dim: usize) -> impl Iterator<Item = Vec
     (0..num_iterations).map(move |i| {
         let mut index = 0;
         let mut remaining = i;
-        for (j, &stride) in strides.iter().enumerate() {
+        for (j, &stride) in strides.iter().enumerate().rev() {
             if j != dim {
                 let size = shape[j];
                 let pos = remaining % size;
@@ -72,10 +72,8 @@ fn visit_node(
         panic!("[utils] Cycle detected in computational graph");
     }
     temp.insert(node_ptr);
-    for parent_weak in &node.parents {
-        if let Some(parent) = parent_weak.upgrade() {
-            visit_node(parent, visited, temp, result);
-        }
+    for parent in node.parents.iter() {
+        visit_node(parent.clone(), visited, temp, result);
     }
     temp.remove(&node_ptr);
     visited.insert(node_ptr);

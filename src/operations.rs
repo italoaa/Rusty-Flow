@@ -33,7 +33,7 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
         let requires_grad = self.requires_grad || other.requires_grad;
 
         // logging parents
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+        let parents = vec![self.0.clone(), other.0.clone()];
         // println!("[add] New has parents: {:?}", parents);
 
         let grad_fn = if requires_grad {
@@ -80,7 +80,7 @@ impl<'a, 'b> Sub<&'b TensorRef> for &'a TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+        let parents = vec![self.0.clone(), other.0.clone()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -115,7 +115,7 @@ impl<'a, 'b> Mul<&'b TensorRef> for &'a TensorRef {
         } else {
             None
         };
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+        let parents = vec![self.0.clone(), other.0.clone()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -154,7 +154,7 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+        let parents = vec![self.0.clone(), other.0.clone()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -209,10 +209,8 @@ impl TensorRef {
             println!("[sum] Sum result: {:?}", result);
         }
 
-        let parents = vec![Rc::downgrade(&self.0)];
-        // let parentsStrong = vec![self.0.clone()];
+        let parents = vec![self.0.clone()];
 
-        // Tensor::new_with_options2(result.clone(), out_shape, true, grad_fn, parentsStrong)
         Tensor::new_with_options(result.clone(), out_shape, true, grad_fn, parents)
     }
 }
@@ -260,7 +258,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0)];
+        let parents = vec![self.0.clone()];
 
         Tensor::new_with_options(result.clone(), out_shape, requires_grad, grad_fn, parents)
     }
@@ -327,7 +325,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&other.0)];
+        let parents = vec![self.0.clone(), other.0.clone()];
 
         Tensor::new_with_options(result, output_shape, requires_grad, grad_fn, parents)
     }
@@ -354,7 +352,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0)];
+        let parents = vec![self.0.clone()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -387,7 +385,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&target.0)];
+        let parents = vec![self.0.clone(), target.0.clone()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -455,7 +453,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&target.0)];
+        let parents = vec![self.0.clone(), target.0.clone()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -520,7 +518,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0), Rc::downgrade(&target.0)];
+        let parents = vec![self.0.clone(), target.0.clone()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -555,7 +553,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![Rc::downgrade(&self.0)];
+        let parents = vec![self.0.clone()];
 
         Tensor::new_with_options(
             output_data,

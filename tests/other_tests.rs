@@ -167,8 +167,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a + &b;
-                let d = c.sum(0);
-                let e = d.sum(0);
+                let d = c.sum(0).sum(0).sum(0);
                 d.backward();
                 // grad are refcelss of vecs
                 let a_grad = a.grad.borrow();
@@ -186,7 +185,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a - &b;
-                let d = c.sum(0);
+                let d = c.sum(0).sum(0).sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();
@@ -203,7 +202,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a * &b;
-                let d = c.sum(0);
+                let d = c.sum(0).sum(0).sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();
@@ -221,7 +220,7 @@ mod others {
                 let b = Tensor::new(vec![5.0, 7.0], vec![1, 2, 1]);
 
                 let c = &a / &b;
-                let d = c.sum(0);
+                let d = c.sum(0).sum(0).sum(0);
                 d.backward();
                 let a_grad = a.grad.borrow();
                 let a_grad = a_grad.as_ref().unwrap();

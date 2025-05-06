@@ -442,68 +442,29 @@ pub fn backward(tensor: &TensorRef) {
                 // grad is the upstream gradient
                 let parent_grads = grad_fn.backward(grad);
                 // use the .parentsStrong to get the parents
-                // for (parent, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
-                //     if is_debug() {
-                //         println!(
-                //             "[autodiff]   - Parent: {:?} with grad {:?}",
-                //             parent, parent_new_grad
-                //         );
-                //     }
-                //     let mut parent_grad = parent.grad.borrow_mut();
-                //     match &mut *parent_grad {
-                //         Some(existing) => {
-                //             if is_debug() {
-                //                 println!("[autodiff]   - Existing grad: {:?}", existing);
-                //             }
-                //             for (e, n) in existing.iter_mut().zip(parent_new_grad) {
-                //                 *e += n;
-                //             }
-                //         }
-                //         None => {
-                //             if is_debug() {
-                //                 println!("[autodiff]   - Setting new grad: {:?}", parent_new_grad);
-                //             }
-                //             parent_grad.replace(parent_new_grad.clone());
-                //         }
-                //     }
-                // }
-
-                for (parent_weak, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
+                for (parent, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
                     if is_debug() {
                         println!(
                             "[autodiff]   - Parent: {:?} with grad {:?}",
-                            parent_weak, parent_new_grad
+                            parent, parent_new_grad
                         );
                     }
-                    if let Some(parent_rc) = parent_weak.upgrade() {
-                        if is_debug() {
-                            println!(
-                                "[autodiff]   - Propagating to parent {:?} with grad {:?}",
-                                parent_rc, parent_new_grad
-                            );
-                        }
-                        let mut parent_grad = parent_rc.grad.borrow_mut();
-                        match &mut *parent_grad {
-                            Some(existing) => {
-                                if is_debug() {
-                                    println!("[autodiff]   - Existing grad: {:?}", existing);
-                                }
-                                for (e, n) in existing.iter_mut().zip(parent_new_grad) {
-                                    *e += n;
-                                }
+                    let mut parent_grad = parent.grad.borrow_mut();
+                    match &mut *parent_grad {
+                        Some(existing) => {
+                            if is_debug() {
+                                println!("[autodiff]   - Existing grad: {:?}", existing);
                             }
-                            None => {
-                                if is_debug() {
-                                    println!(
-                                        "[autodiff]   - Setting new grad: {:?}",
-                                        parent_new_grad
-                                    );
-                                }
-                                parent_grad.replace(parent_new_grad.clone());
+                            for (e, n) in existing.iter_mut().zip(parent_new_grad) {
+                                *e += n;
                             }
                         }
-                    } else {
-                        panic!("[autodiff] Parent weak reference is None");
+                        None => {
+                            if is_debug() {
+                                println!("[autodiff]   - Setting new grad: {:?}", parent_new_grad);
+                            }
+                            parent_grad.replace(parent_new_grad.clone());
+                        }
                     }
                 }
             }
