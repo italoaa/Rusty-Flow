@@ -27,7 +27,7 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
         let mut data: Vec<f32> = Vec::new();
         let mut iter = BroadcastIterator::new(&self, &other);
         while let Some((i, j)) = iter.next() {
-            data.push(self.data[i] + other.data[j]);
+            data.push(self.data.borrow()[i] + other.data.borrow()[j]);
         }
 
         let requires_grad = self.requires_grad || other.requires_grad;
@@ -65,7 +65,7 @@ impl<'a, 'b> Sub<&'b TensorRef> for &'a TensorRef {
         let mut data: Vec<f32> = Vec::new();
         let mut iter = BroadcastIterator::new(&self, &other);
         while let Some((i, j)) = iter.next() {
-            data.push(self.data[i] - other.data[j]);
+            data.push(self.data.borrow()[i] - other.data.borrow()[j]);
         }
 
         let requires_grad = self.requires_grad || other.requires_grad;
@@ -101,7 +101,7 @@ impl<'a, 'b> Mul<&'b TensorRef> for &'a TensorRef {
         let mut data: Vec<f32> = Vec::new();
         let mut iter = BroadcastIterator::new(&self, &other);
         while let Some((i, j)) = iter.next() {
-            data.push(self.data[i] * other.data[j]);
+            data.push(self.data.borrow()[i] * other.data.borrow()[j]);
         }
 
         let requires_grad = self.requires_grad || other.requires_grad;
@@ -136,10 +136,10 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
         let mut data: Vec<f32> = Vec::new();
         let mut iter = BroadcastIterator::new(&self, &other);
         while let Some((i, j)) = iter.next() {
-            if other.data[j] == 0.0 {
+            if other.data.borrow()[j] == 0.0 {
                 panic!("Division by zero");
             }
-            data.push(self.data[i] / other.data[j]);
+            data.push(self.data.borrow()[i] / other.data.borrow()[j]);
         }
 
         let requires_grad = self.requires_grad || other.requires_grad;
@@ -306,7 +306,7 @@ impl TensorRef {
                     for idx in 0..k {
                         let left_idx = left_batch_offset + row * k + idx;
                         let right_idx = right_batch_offset + idx * n + col;
-                        sum += self.data[left_idx] * other.data[right_idx];
+                        sum += self.data.borrow()[left_idx] * other.data.borrow()[right_idx];
                     }
                     result.push(sum);
                 }
@@ -338,6 +338,7 @@ impl TensorRef {
     pub fn relu(&self) -> TensorRef {
         let data = self
             .data
+            .borrow()
             .iter()
             .map(|&x| if x > 0.0 { x } else { 0.0 })
             .collect::<Vec<_>>();
@@ -379,7 +380,7 @@ impl TensorRef {
 
         let mut data = vec![0.0; self.shape[0] * num_classes];
 
-        for (i, &value) in self.data.iter().enumerate() {
+        for (i, &value) in self.data.borrow().iter().enumerate() {
             let index = value as usize;
             assert!(
                 index < num_classes,
@@ -411,8 +412,9 @@ impl TensorRef {
         assert_eq!(self.shape, target.shape);
         let data = self
             .data
+            .borrow()
             .iter()
-            .zip(target.data.iter())
+            .zip(target.data.borrow().iter())
             .map(|(a, b)| (a - b).powi(2))
             .collect::<Vec<_>>();
 
@@ -454,11 +456,11 @@ impl TensorRef {
 
         if is_2d {
             let n_classes = self.shape[1];
-            for row in target.data.chunks_exact(n_classes) {
+            for row in target.data.borrow().chunks_exact(n_classes) {
                 let ones_count = row.iter().filter(|&&x| x == 1.0).count();
                 assert_eq!(ones_count, 1, "Target tensor is not one-hot encoded");
             }
-            for row in self.data.chunks_exact(n_classes) {
+            for row in self.data.borrow().chunks_exact(n_classes) {
                 let sum: f32 = row.iter().sum();
                 assert!(
                     (sum - 1.0).abs() < 1e-6,
@@ -468,10 +470,10 @@ impl TensorRef {
             }
         } else if is_1d {
             // 1D: target shape [num_classes]
-            let ones_count = target.data.iter().filter(|&&x| x == 1.0).count();
+            let ones_count = target.data.borrow().iter().filter(|&&x| x == 1.0).count();
             assert_eq!(ones_count, 1, "1D target tensor is not one-hot encoded");
 
-            let sum: f32 = self.data.iter().sum();
+            let sum: f32 = self.data.borrow().iter().sum();
             assert!(
                 (sum - 1.0).abs() < 1e-6,
                 "1D input tensor is not a probability distribution"
@@ -481,8 +483,9 @@ impl TensorRef {
         // Calculate cross-entropy: same for both cases
         let data = self
             .data
+            .borrow()
             .iter()
-            .zip(target.data.iter())
+            .zip(target.data.borrow().iter())
             .map(|(a, b)| -b * (a + 1e-6).ln())
             .collect::<Vec<_>>();
 
@@ -520,13 +523,13 @@ impl TensorRef {
 
         if is_2d {
             let n_classes = self.shape[1];
-            for row in target.data.chunks_exact(n_classes) {
+            for row in target.data.borrow().chunks_exact(n_classes) {
                 let ones_count = row.iter().filter(|&&x| x == 1.0).count();
                 assert_eq!(ones_count, 1, "Target tensor is not one-hot encoded");
             }
         } else if is_1d {
             // 1D: target shape [num_classes]
-            let ones_count = target.data.iter().filter(|&&x| x == 1.0).count();
+            let ones_count = target.data.borrow().iter().filter(|&&x| x == 1.0).count();
             assert_eq!(ones_count, 1, "1D target tensor is not one-hot encoded");
         }
 
@@ -538,8 +541,9 @@ impl TensorRef {
         // Calculate cross-entropy: same for both cases
         let data = self_softmax
             .data
+            .borrow()
             .iter()
-            .zip(target.data.iter())
+            .zip(target.data.borrow().iter())
             .map(|(a, b)| -b * (a + 1e-6).ln())
             .collect::<Vec<_>>();
 
@@ -566,10 +570,10 @@ impl TensorRef {
 
     // on a dim
     pub fn softmax(&self, dim: usize) -> TensorRef {
-        let mut output_data = vec![0.0; self.data.len()];
+        let mut output_data = vec![0.0; self.data.borrow().len()];
 
         for indices in self.iterate_over_dim_indices(dim) {
-            let group: Vec<f32> = indices.iter().map(|&i| self.data[i]).collect();
+            let group: Vec<f32> = indices.iter().map(|&i| self.data.borrow()[i]).collect();
 
             let max_val = group.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
             let exps: Vec<f32> = group.iter().map(|&x| (x - max_val).exp()).collect();

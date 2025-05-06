@@ -1,5 +1,8 @@
 #+title: Rusty flow
 
+* Right now the biggest problem is that the data is not mutable.
+- option 1 is to use RefCell in the data object.
+
 * TODO dim arg for the reductions and activations
 softmax needs a dimension where to act as well as mean and sum
 

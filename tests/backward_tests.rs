@@ -172,14 +172,14 @@ mod backward {
                 let agrad = a.grad.borrow();
                 let agrad = agrad.as_ref().unwrap();
                 let expected_grad =
-                    Tensor::new(expected.data[i * 3..(i + 1) * 3].to_vec(), vec![3]);
+                    Tensor::new(expected.data.borrow()[i * 3..(i + 1) * 3].to_vec(), vec![3]);
                 let mse = a.mse(&expected_grad);
                 for j in 0..agrad.len() {
                     assert!(
-                        mse.data[j] > 1e-6,
+                        mse.data.borrow()[j] > 1e-6,
                         "Expected {} to be close to {}",
                         agrad[j],
-                        expected_grad.data[j]
+                        expected_grad.data.borrow()[j]
                     );
                 }
             }

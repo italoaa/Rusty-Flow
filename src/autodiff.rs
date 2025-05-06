@@ -143,13 +143,13 @@ impl GradFn for MulBack {
         let mut left_grad = Vec::new();
         let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
         while let Some((i, j)) = iter.next() {
-            left_grad.push(upstream_grad[i] * self.right.data[j]);
+            left_grad.push(upstream_grad[i] * self.right.data.borrow()[j]);
         }
 
         let mut right_grad = Vec::new();
         let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.left.shape);
         while let Some((i, j)) = iter.next() {
-            right_grad.push(upstream_grad[i] * self.left.data[j]);
+            right_grad.push(upstream_grad[i] * self.left.data.borrow()[j]);
         }
 
         // Unbroadcast the gradients
@@ -181,7 +181,7 @@ impl GradFn for DivBack {
         let mut left_grad = Vec::new();
         let mut iter = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
         while let Some((i, j)) = iter.next() {
-            left_grad.push(upstream_grad[i] / self.right.data[j]);
+            left_grad.push(upstream_grad[i] / self.right.data.borrow()[j]);
         }
 
         let mut right_grad = Vec::new();
@@ -189,8 +189,8 @@ impl GradFn for DivBack {
         let mut iter_r = BroadcastIterator::new_with_shapes(&self.out_shape, &self.right.shape);
 
         while let (Some((i_l, j_l)), Some((_, j_r))) = (iter_l.next(), iter_r.next()) {
-            let l = self.left.data[j_l];
-            let r = self.right.data[j_r];
+            let l = self.left.data.borrow()[j_l];
+            let r = self.right.data.borrow()[j_r];
             right_grad.push(-upstream_grad[i_l] * l / (r * r));
         }
 
@@ -235,8 +235,8 @@ impl GradFn for MMBack {
         let mut iter_r = BroadcastIterator::new_with_shapes(&out_batch_shape, &right_batch_shape);
 
         // Results
-        let mut left_grad_accum = vec![0.0; self.left.data.len()];
-        let mut right_grad_accum = vec![0.0; self.right.data.len()];
+        let mut left_grad_accum = vec![0.0; self.left.data.borrow().len()];
+        let mut right_grad_accum = vec![0.0; self.right.data.borrow().len()];
 
         // Iterate over the batch dimensions
         while let (Some((i_out, i_left)), Some((_, i_right))) = (iter_l.next(), iter_r.next()) {
@@ -246,8 +246,9 @@ impl GradFn for MMBack {
             let out_batch_offset = i_out * m * p;
 
             let upstream_grad_batch = &upstream_grad[out_batch_offset..out_batch_offset + m * p];
-            let left_batch = &self.left.data[left_batch_offset..left_batch_offset + m * n];
-            let right_batch = &self.right.data[right_batch_offset..right_batch_offset + n * p];
+            let left_batch = &self.left.data.borrow()[left_batch_offset..left_batch_offset + m * n];
+            let right_batch =
+                &self.right.data.borrow()[right_batch_offset..right_batch_offset + n * p];
 
             let upstream_grad_tensor = Tensor::new(upstream_grad_batch.to_vec(), vec![m, p]);
             let left_batch_tensor = Tensor::new(left_batch.to_vec(), vec![m, n]);
@@ -258,10 +259,16 @@ impl GradFn for MMBack {
             let right_grad_batch = left_batch_tensor.transpose().mm(&upstream_grad_tensor);
 
             // We are still in broadcasted space, so we need to unbroadcast
-            let left_grad =
-                unbroadcast_grads(&left_grad_batch.data, &self.out_shape, &self.left.shape);
-            let right_grad =
-                unbroadcast_grads(&right_grad_batch.data, &self.out_shape, &self.right.shape);
+            let left_grad = unbroadcast_grads(
+                &left_grad_batch.data.borrow(),
+                &self.out_shape,
+                &self.left.shape,
+            );
+            let right_grad = unbroadcast_grads(
+                &right_grad_batch.data.borrow(),
+                &self.out_shape,
+                &self.right.shape,
+            );
 
             // Add the gradients to the output
             for i in 0..left_grad.len() {
@@ -288,6 +295,7 @@ impl GradFn for ReLUBack {
         let grad_input: Vec<f32> = self
             .input
             .data
+            .borrow()
             .iter()
             .zip(upstream_grad.iter())
             .map(|(input, grad)| if *input > 0.0 { *grad } else { 0.0 })
@@ -310,8 +318,9 @@ impl GradFn for MSEBack {
         let grad_input: Vec<f32> = self
             .input
             .data
+            .borrow()
             .iter()
-            .zip(self.target.data.iter())
+            .zip(self.target.data.borrow().iter())
             .zip(upstream_grad.iter())
             .map(|((input, target), grad)| 2.0 * (*input - *target) * *grad)
             .collect();
@@ -333,8 +342,9 @@ impl GradFn for CrossEntropyBack {
         let grad_input: Vec<f32> = self
             .input
             .data
+            .borrow()
             .iter()
-            .zip(self.target.data.iter())
+            .zip(self.target.data.borrow().iter())
             .zip(upstream_grad.iter())
             .map(|((input, target), grad)| -(*target / *input) * *grad)
             .collect();
@@ -358,10 +368,10 @@ impl GradFn for SoftmaxBack {
         // dL/dxi = si * (dL/dsi - SUM_j(dL/dsj * sj))
 
         let s = &self.output.data;
-        let mut grad_input = vec![0.0; s.len()];
+        let mut grad_input = vec![0.0; s.borrow().len()];
 
         for indices in self.output.iterate_over_dim_indices(self.dim) {
-            let s_slice: Vec<f32> = indices.iter().map(|&i| s[i]).collect();
+            let s_slice: Vec<f32> = indices.iter().map(|&i| s.borrow()[i]).collect();
             let upstream_slice: Vec<f32> = indices.iter().map(|&i| upstream_grad[i]).collect();
 
             let dot: f32 = s_slice
@@ -394,8 +404,9 @@ impl GradFn for CrossEntropyLogitsBack {
         let downstream_grad: Vec<f32> = self
             .softmax
             .data
+            .borrow()
             .iter()
-            .zip(self.target.data.iter())
+            .zip(self.target.data.borrow().iter())
             .map(|(softmax, target)| softmax - target)
             .collect();
 

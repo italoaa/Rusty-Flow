@@ -283,8 +283,8 @@ mod others {
             let mut count = 0;
 
             while let Some((i, j)) = iter.next() {
-                let a_val = a.data[i];
-                let b_val = b.data[j];
+                let a_val = a.data.borrow()[i];
+                let b_val = b.data.borrow()[j];
                 assert!(a_val == 1.0 || a_val == 2.0 || a_val == 3.0 || a_val == 4.0);
                 assert!(b_val == 5.0 || b_val == 7.0);
 

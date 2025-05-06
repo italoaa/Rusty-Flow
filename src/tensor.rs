@@ -13,7 +13,7 @@ use std::{
 
 #[derive(Clone)]
 pub struct Tensor {
-    pub data: Vec<f32>, // data is stored in row-major order
+    pub data: RefCell<Vec<f32>>, // data is stored in row-major order
     pub shape: Vec<usize>,
     pub strides: Vec<usize>, // stride is not used yet
     pub requires_grad: bool,
@@ -122,7 +122,7 @@ impl Tensor {
         let strides = compute_strides(&shape);
 
         TensorRef(Rc::new(Tensor {
-            data,
+            data: data.into(),
             shape,
             strides,
             requires_grad,
@@ -160,12 +160,12 @@ impl Tensor {
         let rows = self.shape[0];
         let cols = self.shape[1];
 
-        let mut data = vec![0.0 as f32; self.data.len()];
+        let mut data = vec![0.0 as f32; self.data.borrow().len()];
         let shape = vec![cols, rows];
 
         for i in 0..rows {
             for j in 0..cols {
-                data[j * rows + i] = self.data[i * cols + j];
+                data[j * rows + i] = self.data.borrow()[i * cols + j];
             }
         }
 
@@ -193,12 +193,13 @@ impl PartialEq for Tensor {
 
 impl Tensor {
     pub fn approx_eq(&self, other: &TensorRef, tol: f32) -> bool {
-        if self.shape != other.shape || self.data.len() != other.data.len() {
+        if self.shape != other.shape || self.data.borrow().len() != other.data.borrow().len() {
             return false;
         }
         self.data
+            .borrow()
             .iter()
-            .zip(other.data.iter())
+            .zip(other.data.borrow().iter())
             .all(|(a, b)| (a - b).abs() <= tol)
     }
 
@@ -214,7 +215,7 @@ impl Tensor {
     pub fn iterate_over_dim<'a>(&'a self, dim: usize) -> impl Iterator<Item = Vec<f32>> + 'a {
         let data = &self.data;
         slices_along_dim(&self.shape, dim)
-            .map(move |indices| indices.into_iter().map(|i| data[i]).collect())
+            .map(move |indices| indices.into_iter().map(|i| data.borrow()[i]).collect())
     }
 
     pub fn iterate_over_dim_indices<'a>(
@@ -255,7 +256,7 @@ impl fmt::Debug for Tensor {
         }
 
         // Format the tensor's data
-        let data_str = format_data(&self.data, &self.shape, 0);
+        let data_str = format_data(&self.data.borrow(), &self.shape, 0);
 
         // Format the other fields
         let grad_str = if let Some(grad) = self.grad.borrow().as_ref() {

@@ -82,12 +82,12 @@ mod ops {
         let result = a.cross_entropy(&b);
         let expected = Tensor::new(vec![0.0, 1.60943791, 0.0], vec![3]);
         let mse = a.mse(&expected);
-        for i in 0..mse.data.len() {
+        for i in 0..mse.data.borrow().len() {
             assert!(
-                mse.data[i] > 1e-6,
+                mse.data.borrow()[i] > 1e-6,
                 "Expected {} to be close to {}",
-                result.data[i],
-                mse.data[i]
+                result.data.borrow()[i],
+                mse.data.borrow()[i]
             );
         }
     }
@@ -98,12 +98,12 @@ mod ops {
         let result = a.softmax(0);
         let expected = Tensor::new(vec![0.0900, 0.2447, 0.6652], vec![3]);
         let mse = a.mse(&expected);
-        for i in 0..result.data.len() {
+        for i in 0..result.data.borrow().len() {
             assert!(
-                mse.data[i] > 1e-6,
+                mse.data.borrow()[i] > 1e-6,
                 "Expected {} to be close to {}",
-                result.data[i],
-                expected.data[i]
+                result.data.borrow()[i],
+                expected.data.borrow()[i]
             );
         }
     }
