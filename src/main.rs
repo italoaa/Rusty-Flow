@@ -38,11 +38,13 @@ impl DataLoader {
         let mut batches = Vec::new();
         let train_df = dataset.train;
         let _test_df = dataset.test;
+        // TODO do also the test df
 
         // get the number of rows
         let num_rows = train_df.height();
 
         // create batches
+        // NOTE: remove the 10 to do the whole dataset
         for i in (0..10).step_by(batch_size) {
             let end = std::cmp::min(i + batch_size, num_rows);
             let mut batch_df = train_df.slice(i as i64, end - i as usize);
@@ -134,22 +136,15 @@ fn main() {
     let data_loader = DataLoader::new(dataset, batch_size, shuffle);
 
     println!(
-        "ba {}, suf: {}",
-        data_loader.batch_size, data_loader.shuffle
-    );
-
-    println!(
         "DataLoader created with {} batches of size {}",
         data_loader.batches.len(),
         batch_size
     );
 
-    let i = 0;
+    let mut i = 0;
     for batch in &data_loader.batches {
-        println!("Batch data shape: {:?}", batch.data.shape);
-        println!("Batch labels shape: {:?}", batch.labels.shape);
-
-        // THe NN has a hidden layer of 128 and an output layer of 10
+        let labels = batch.labels.one_hot(10);
+        // The NN has a hidden layer of 128 and an output layer of 10
         // if the input is batchsize, 784
         // the hidden layer is batchsize, 128
         // the weights are 784, 128
@@ -160,18 +155,20 @@ fn main() {
         let b2 = Tensor::ones_like(vec![10]);
 
         // forward pass
-        // xw1 = x * w1
-        // acts = xw + b1
         let xw1 = batch.data.mm(&w1);
         let acts1 = &xw1 + &b1;
         acts1.relu();
 
         let xw2 = acts1.mm(&w2);
         let logits = &xw2 + &b2;
-        let cross_entropy = logits.cross_entropy(&batch.labels);
+        let cross_entropy = logits.cross_entropy_with_logits(&labels);
         let loss = cross_entropy.mean(0);
-        println!("Batch {}: Loss: {:?}", i, loss);
         loss.backward();
+
+        i += 1;
+        if i > 3 {
+            break;
+        }
     }
 
     println!("Hello, world!");

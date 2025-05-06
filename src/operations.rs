@@ -358,6 +358,48 @@ impl TensorRef {
     }
 }
 
+// ==================== Encodings ==================
+
+impl TensorRef {
+    pub fn one_hot(&self, num_classes: usize) -> TensorRef {
+        assert!(
+            self.shape.len() == 2,
+            "One-hot encoding only supports 2D tensors"
+        );
+
+        assert_eq!(
+            self.shape[1], 1,
+            "One-hot encoding only supports tensors with shape [batch_size, 1]"
+        );
+
+        assert!(
+            self.requires_grad == false,
+            "One-hot encoding does not support tensors with requires_grad, maybe yet?"
+        );
+
+        let mut data = vec![0.0; self.shape[0] * num_classes];
+
+        for (i, &value) in self.data.iter().enumerate() {
+            let index = value as usize;
+            assert!(
+                index < num_classes,
+                "Value {} is out of range for one-hot encoding with {} classes",
+                value,
+                num_classes
+            );
+            data[i * num_classes + index] = 1.0;
+        }
+
+        Tensor::new_with_options(
+            data,
+            vec![self.shape[0], num_classes],
+            self.requires_grad,
+            None,
+            vec![self.0.clone()],
+        )
+    }
+}
+
 // ================ Comparison Operations ==================
 // in here there is a lot of naming convention where if the function name includes loss then the
 // output of the operation will be a scalar
@@ -420,7 +462,8 @@ impl TensorRef {
                 let sum: f32 = row.iter().sum();
                 assert!(
                     (sum - 1.0).abs() < 1e-6,
-                    "Input tensor row is not a probability distribution"
+                    "Input tensor row is not a probability distribution, from row: {:?}, summed: {:?}",
+                    row, sum
                 );
             }
         } else if is_1d {
@@ -460,7 +503,11 @@ impl TensorRef {
 
     pub fn cross_entropy_with_logits(&self, target: &TensorRef) -> TensorRef {
         // Check shapes: must match exactly
-        assert_eq!(self.shape, target.shape);
+        assert_eq!(
+            self.shape, target.shape,
+            "Input and target tensors must have the same shape but found shapes {:?} and {:?}",
+            self.shape, target.shape
+        );
 
         let is_2d = self.shape.len() == 2;
         let is_1d = self.shape.len() == 1;
@@ -477,27 +524,15 @@ impl TensorRef {
                 let ones_count = row.iter().filter(|&&x| x == 1.0).count();
                 assert_eq!(ones_count, 1, "Target tensor is not one-hot encoded");
             }
-            for row in self.data.chunks_exact(n_classes) {
-                let sum: f32 = row.iter().sum();
-                assert!(
-                    (sum - 1.0).abs() < 1e-6,
-                    "Input tensor row is not a probability distribution"
-                );
-            }
         } else if is_1d {
             // 1D: target shape [num_classes]
             let ones_count = target.data.iter().filter(|&&x| x == 1.0).count();
             assert_eq!(ones_count, 1, "1D target tensor is not one-hot encoded");
-
-            let sum: f32 = self.data.iter().sum();
-            assert!(
-                (sum - 1.0).abs() < 1e-6,
-                "1D input tensor is not a probability distribution"
-            );
         }
 
         // First, apply softmax to the input tensor
         let last_dim = self.shape.len() - 1;
+        let num_classes = self.shape[last_dim];
         let self_softmax = self.softmax(last_dim);
 
         // Calculate cross-entropy: same for both cases
@@ -506,6 +541,12 @@ impl TensorRef {
             .iter()
             .zip(target.data.iter())
             .map(|(a, b)| -b * (a + 1e-6).ln())
+            .collect::<Vec<_>>();
+
+        // Aggregate the value for the batch
+        let data = data
+            .chunks(num_classes)
+            .map(|chunk| chunk.iter().sum())
             .collect::<Vec<_>>();
 
         let requires_grad = self.requires_grad || target.requires_grad;
@@ -520,7 +561,7 @@ impl TensorRef {
 
         let parents = vec![self.0.clone(), target.0.clone()];
 
-        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+        Tensor::new_with_options(data, vec![self.shape[0]], requires_grad, grad_fn, parents)
     }
 
     // on a dim

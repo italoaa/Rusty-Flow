@@ -80,6 +80,31 @@ impl Tensor {
         )
     }
 
+    pub fn new_nograd(data: Vec<f32>, shape: Vec<usize>) -> TensorRef {
+        // accept scalars of shape []
+        if shape.is_empty() {
+            assert_eq!(data.len(), 1, "Data size must be 1 for scalar");
+        } else {
+            assert_eq!(
+                data.len(),
+                shape.iter().product(),
+                "Data size must match shape {:?}, {} != {}, (data: {:?})",
+                shape,
+                data.len(),
+                shape.iter().product::<usize>(),
+                data
+            );
+        }
+
+        Tensor::new_with_options(
+            data,
+            shape,
+            false, // by default requires_grad is false
+            None,
+            vec![],
+        )
+    }
+
     // Full constructor
     pub fn new_with_options(
         data: Vec<f32>,
@@ -88,6 +113,7 @@ impl Tensor {
         grad_fn: Option<Rc<dyn GradFn>>,
         parents: Vec<Rc<Tensor>>,
     ) -> TensorRef {
+        // data its len and the shape
         assert_eq!(
             data.len(),
             shape.iter().product(),
@@ -239,7 +265,13 @@ impl fmt::Debug for Tensor {
         };
 
         let parents_str = if !self.parents.is_empty() {
-            format!("\n  parents: {:?}", self.parents)
+            // iterate through the parents and print their shapes
+            let parents_shapes: Vec<String> = self
+                .parents
+                .iter()
+                .map(|parent| format!("{:?}", parent.shape))
+                .collect();
+            format!("\n  parents: [{}]", parents_shapes.join(", "))
         } else {
             String::new()
         };
