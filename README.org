@@ -1,5 +1,38 @@
 #+title: Rusty flow
+Rusty Flow is a dependency-free autodiff tensor library in Rust built for education. It supports reverse-mode autodiff and PyTorch-style broadcasting using a fully custom backend.
 
+* Training a simple MLP
+#+begin_src rust
+let parameters = vec![w1, w2, b1, b2]; // Parameters weights and biases
+let mut optim = SGD::new(
+    parameters, // Parameters
+    0.001,      // Learning Rate
+    0.9,        // Momentum
+    0.02         // Weight decay
+);
+for epoch in 0..epochs {
+    for batch in data_loader.batches.iter() {
+        optim.zero_grad();
+        // ... Tensor Operations
+        // Loss calculation
+        let loss = logits.cross_entropy_with_logits(targets).mean(0);
+
+        // Backwards pass and SGD step
+        loss.backward();
+        optim.step()
+    }
+}
+#+end_src
+
+* Features
+- dynamic graph
+- sgd optimizer
+- Weight initializers
+- Dependencie free
+- Broadcasting
+  
+
+* Example output
 DataLoader created with 100 batches of size 64
 Epoch: 0 Sample: 99, Loss: 2.1085658
 Epoch: 0 Average Loss: 2.2366028
@@ -20,14 +53,6 @@ Epoch: 7 Average Loss: 1.357685
 Epoch: 8 Sample: 99, Loss: 1.0930517
 Epoch: 8 Average Loss: 1.30661
 Epoch: 9 Sample: 92, Loss: 1.0039881
-* Right now the biggest problem is that the data is not mutable.
-- option 1 is to use RefCell in the data object.
-
-* TODO dim arg for the reductions and activations
-softmax needs a dimension where to act as well as mean and sum
-
-* TODO NN testing
-- before going into mnist i should see if i can do a complete fw and bw pass
 
 # Local Variables:
 # jinx-local-words: "Rustyflow"
