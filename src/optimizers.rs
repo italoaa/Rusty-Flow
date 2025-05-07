@@ -55,6 +55,15 @@ impl SGD {
             dampening,
         }
     }
+    pub fn zero_grad(&mut self) {
+        for param in self.parameters.iter() {
+            if let Some(grad) = param.grad.borrow_mut().as_mut() {
+                for g in grad.iter_mut() {
+                    *g = 0.0;
+                }
+            }
+        }
+    }
 
     pub fn step(&mut self) {
         for (param, velocity) in self.parameters.iter().zip(self.velocities.iter_mut()) {

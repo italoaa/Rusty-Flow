@@ -68,4 +68,22 @@ mod backward {
             a
         );
     }
+
+    #[test]
+    fn test_sgd_zero_grad() {
+        let a = Tensor::new(vec![1., 2., 3.], vec![3]);
+        a.set_grad(vec![2.0, 1.0, -4.0]);
+
+        let mut optim = SGD::new(vec![a.rc()], 0.01, 0.0, 0.);
+        optim.zero_grad();
+        let expected = Tensor::new(vec![1., 2., 3.], vec![3]);
+        expected.set_grad(vec![0.0, 0.0, 0.0]);
+
+        assert!(
+            a.approx_eq(&expected, 1e-5),
+            "Expected: {:?}, Actual: {:?}",
+            expected,
+            a
+        );
+    }
 }

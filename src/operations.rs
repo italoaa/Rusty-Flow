@@ -1,7 +1,7 @@
 use crate::autodiff::GradFn;
 use crate::autodiff::{
-    AddBack, CrossEntropyBack, CrossEntropyLogitsBack, DivBack, MMBack, MSEBack, MeanBack, MulBack,
-    ReLUBack, SoftmaxBack, SubBack, SumBack,
+    AddBack, CrossEntropyBack, CrossEntropyLogitsBack, DivBack, LReLUBack, MMBack, MSEBack,
+    MeanBack, MulBack, ReLUBack, SoftmaxBack, SubBack, SumBack,
 };
 use crate::broadcast::{broadcast_shape, BroadcastIterator};
 use crate::is_debug;
@@ -25,8 +25,15 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
         }
 
         let mut data: Vec<f32> = Vec::new();
-        let mut iter = BroadcastIterator::new(&self, &other);
+        let mut iter = BroadcastIterator::new(self, other);
         while let Some((i, j)) = iter.next() {
+            // catch a out of bounds error
+            if i >= self.data.borrow().len() || j >= other.data.borrow().len() {
+                panic!(
+                    "The iterator produced an out of bounds error for the shapes {:?} and {:?}\n the iterator produced the following indices {:?}, \n debug data: {:?}",
+                    self.shape, other.shape, BroadcastIterator::new(self, other).collect::<Vec<_>>(), iter.debug()
+                );
+            }
             data.push(self.data.borrow()[i] + other.data.borrow()[j]);
         }
 
@@ -347,6 +354,30 @@ impl TensorRef {
 
         let grad_fn = if requires_grad {
             Some(Rc::new(ReLUBack { input: self.rc() }) as Rc<dyn GradFn>)
+        } else {
+            None
+        };
+
+        let parents = vec![self.rc()];
+
+        Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
+    }
+
+    pub fn lrelu(&self, alpha: f32) -> TensorRef {
+        let data = self
+            .data
+            .borrow()
+            .iter()
+            .map(|&x| if x > 0.0 { x } else { alpha * x })
+            .collect::<Vec<_>>();
+
+        let requires_grad = self.requires_grad;
+
+        let grad_fn = if requires_grad {
+            Some(Rc::new(LReLUBack {
+                input: self.rc(),
+                alpha,
+            }) as Rc<dyn GradFn>)
         } else {
             None
         };

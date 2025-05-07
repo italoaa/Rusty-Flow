@@ -304,6 +304,34 @@ impl GradFn for ReLUBack {
         vec![grad_input]
     }
 }
+// LRELU
+
+pub struct LReLUBack {
+    pub input: Rc<Tensor>,
+    pub alpha: f32,
+}
+
+impl GradFn for LReLUBack {
+    fn backward(&self, upstream_grad: &Vec<f32>) -> Vec<Vec<f32>> {
+        // The gradient of ReLU is 1 for positive inputs and 0 for negative inputs
+        let grad_input: Vec<f32> = self
+            .input
+            .data
+            .borrow()
+            .iter()
+            .zip(upstream_grad.iter())
+            .map(|(input, grad)| {
+                if *input > 0.0 {
+                    *grad
+                } else {
+                    self.alpha * *grad
+                }
+            })
+            .collect();
+
+        vec![grad_input]
+    }
+}
 
 // ================ MSE ==================
 
@@ -452,7 +480,6 @@ pub fn backward(tensor: &TensorRef) {
 
                 // grad is the upstream gradient
                 let parent_grads = grad_fn.backward(grad);
-                // use the .parentsStrong to get the parents
                 for (parent, parent_new_grad) in node.parents.iter().zip(parent_grads.iter()) {
                     if is_debug() {
                         println!(

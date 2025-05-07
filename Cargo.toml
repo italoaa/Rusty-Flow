@@ -8,6 +8,7 @@ name = "nn"
 path= "src/main.rs"
 
 [dependencies]
+indicatif = "0.17.11"
 polars = { version = "0.46.0", features = ["csv"] }
 rand = "0.9.1"
 rand_distr = "0.5.1"

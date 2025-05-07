@@ -66,6 +66,14 @@ impl BroadcastIterator {
             total,
         }
     }
+
+    // return debug strig of everything
+    pub fn debug(&self) -> String {
+        format!(
+            "BroadcastIterator {{ left_shape: {:?}, right_shape: {:?}, out_shape: {:?}, index: {}, total: {} }}",
+            self.left_shape, self.right_shape, self.out_shape, self.index, self.total
+        )
+    }
 }
 
 impl Iterator for BroadcastIterator {

@@ -152,6 +152,13 @@ impl Tensor {
         Tensor::new(data, shape)
     }
 
+    pub fn zeros_like(shape: Vec<usize>) -> TensorRef {
+        let size = shape.iter().product();
+        let data = vec![0.0; size];
+
+        Tensor::new(data, shape)
+    }
+
     // Sample from a normal distribution
     // mainly used to make weights so requires_grad is true
     pub fn new_random(shape: Vec<usize>) -> TensorRef {
@@ -162,6 +169,35 @@ impl Tensor {
                 let val: f32 = rand::rng().sample(StandardNormal);
                 val
             })
+            .collect();
+
+        Tensor::new(data, shape)
+    }
+
+    pub fn xavier_init(shape: Vec<usize>) -> TensorRef {
+        assert!(shape.len() >= 2, "Xavier init requires at least 2D shape");
+
+        let fan_in = shape[shape.len() - 2];
+        let fan_out = shape[shape.len() - 1];
+        let limit = (6.0 / (fan_in + fan_out) as f32).sqrt();
+
+        let size = shape.iter().product();
+        let data: Vec<f32> = (0..size)
+            .map(|_| rand::rng().gen_range(-limit..limit))
+            .collect();
+
+        Tensor::new(data, shape)
+    }
+
+    pub fn kaiming_init(shape: Vec<usize>, negative_slope: f32) -> TensorRef {
+        assert!(shape.len() >= 2, "Kaiming init requires at least 2D shape");
+
+        let fan_in = shape[shape.len() - 2];
+        let std = (2.0 / ((1.0 + negative_slope.powi(2)) * fan_in as f32)).sqrt();
+
+        let size = shape.iter().product();
+        let data: Vec<f32> = (0..size)
+            .map(|_| rand::rng().sample::<f32, _>(StandardNormal) * std)
             .collect();
 
         Tensor::new(data, shape)
@@ -221,6 +257,8 @@ impl Tensor {
             parent.clear_grad();
         }
     }
+
+    pub fn normalize() {}
 }
 
 impl Tensor {
@@ -243,7 +281,7 @@ impl fmt::Debug for Tensor {
         // Helper function to recursively format the tensor's data
         fn format_data(data: &[f32], shape: &[usize], indent: usize) -> String {
             match shape.len() {
-                0 => "".to_string(), // Empty tensor
+                0 => format!("{:.4}", data[0]), // scalar: display as a single value
                 1 => {
                     // 1D tensor: display as a row
                     let elements: Vec<String> = data.iter().map(|x| format!("{:.4}", x)).collect();
@@ -269,6 +307,13 @@ impl fmt::Debug for Tensor {
 
         // Format the tensor's data
         let data_str = format_data(&self.data.borrow(), &self.shape, 0);
+        // Shorten the data string if it's too long
+        let max_length = 100;
+        let data_str = if data_str.len() > max_length {
+            format!("{}...", &data_str[..max_length])
+        } else {
+            data_str
+        };
 
         // Format the other fields
         let grad_str = if let Some(grad) = self.grad.borrow().as_ref() {

@@ -1,9 +1,12 @@
+use rflow::optimizers::SGD;
 use rflow::tensor::{Tensor, TensorRef};
 
 // polars
 use polars::prelude::*;
 use std::fs::File;
 //rand
+use indicatif::ProgressBar;
+use std::io::Write;
 
 struct Batch {
     data: TensorRef,
@@ -34,20 +37,19 @@ impl Dataset {
 }
 
 impl DataLoader {
-    fn new(dataset: Dataset, batch_size: usize, shuffle: bool) -> Self {
+    fn new(dataset: DataFrame, batch_size: usize, shuffle: bool) -> Self {
         let mut batches = Vec::new();
-        let train_df = dataset.train;
-        let _test_df = dataset.test;
-        // TODO do also the test df
 
         // get the number of rows
-        let num_rows = train_df.height();
+        let num_rows = dataset.height();
+
+        // progress bar
+        let pb = ProgressBar::new(6400);
 
         // create batches
-        // NOTE: remove the 10 to do the whole dataset
-        for i in (0..10).step_by(batch_size) {
+        for i in (0..6400).step_by(batch_size) {
             let end = std::cmp::min(i + batch_size, num_rows);
-            let mut batch_df = train_df.slice(i as i64, end - i as usize);
+            let mut batch_df = dataset.slice(i as i64, end - i as usize);
             let labels: Vec<i64> = batch_df
                 .column("label")
                 .unwrap()
@@ -88,7 +90,7 @@ impl DataLoader {
                         .try_extract::<f64>()
                         .unwrap_or(0.0) as f32;
 
-                    pixels.push(value);
+                    pixels.push(value / 255.0); // Normalize pixel values to [0, 1]
                 }
             }
 
@@ -103,8 +105,10 @@ impl DataLoader {
             };
 
             // Add the batch to the list of batches
-
             batches.push(batch);
+
+            // Update the progress bar
+            pb.inc(1);
         }
 
         // shuffle the batches if needed
@@ -131,9 +135,9 @@ fn main() {
 
     let dataset = Dataset::new(train_file, test_file);
 
-    let batch_size = 2;
+    let batch_size = 64;
     let shuffle = true;
-    let data_loader = DataLoader::new(dataset, batch_size, shuffle);
+    let data_loader = DataLoader::new(dataset.train, batch_size, shuffle);
 
     println!(
         "DataLoader created with {} batches of size {}",
@@ -141,35 +145,67 @@ fn main() {
         batch_size
     );
 
-    let mut i = 0;
-    for batch in &data_loader.batches {
-        let labels = batch.labels.one_hot(10);
-        // The NN has a hidden layer of 128 and an output layer of 10
-        // if the input is batchsize, 784
-        // the hidden layer is batchsize, 128
-        // the weights are 784, 128
-        let w1 = Tensor::new_random(vec![784, 128]);
-        let b1 = Tensor::ones_like(vec![128]);
+    // Parameters
+    // The NN has a hidden layer of 128 and an output layer of 10
+    // if the input is batchsize, 784
+    // the hidden layer is batchsize, 128
+    // the weights are 784, 128
+    let w1 = Tensor::kaiming_init(vec![784, 128], 0.1);
+    let b1 = Tensor::zeros_like(vec![1, 128]);
 
-        let w2 = Tensor::new_random(vec![128, 10]);
-        let b2 = Tensor::ones_like(vec![10]);
+    let w2 = Tensor::kaiming_init(vec![128, 64], 0.1);
+    let b2 = Tensor::zeros_like(vec![1, 64]);
 
-        // forward pass
-        let xw1 = batch.data.mm(&w1);
-        let acts1 = &xw1 + &b1;
-        acts1.relu();
+    let w3 = Tensor::kaiming_init(vec![64, 10], 0.1);
+    let b3 = Tensor::zeros_like(vec![1, 10]);
 
-        let xw2 = acts1.mm(&w2);
-        let logits = &xw2 + &b2;
-        let cross_entropy = logits.cross_entropy_with_logits(&labels);
-        let loss = cross_entropy.mean(0);
-        loss.backward();
+    let params = vec![w1.rc(), b1.rc(), w2.rc(), b2.rc(), w3.rc(), b3.rc()];
+    let mut optim = SGD::new(params, 0.001, 0.0, 0.0);
 
-        i += 1;
-        if i > 3 {
-            break;
+    // Epoch bar
+    for epoch in 0..10 {
+        let mut losses = vec![];
+        for (i, batch) in data_loader.batches.iter().enumerate() {
+            optim.zero_grad();
+            // One hot
+            let labels = batch.labels.one_hot(10);
+
+            // Forward
+            let xw1 = batch.data.mm(&w1);
+            let preacts1 = &xw1 + &b1;
+            let acts1 = preacts1.lrelu(0.1);
+            let xw2 = acts1.mm(&w2);
+            let preacts2 = &xw2 + &b2;
+            let acts2 = preacts2.lrelu(0.1);
+            let xw3 = acts2.mm(&w3);
+            let logits = &xw3 + &b3;
+
+            // Loss calculation
+            let cross_entropy = logits.cross_entropy_with_logits(&labels);
+            let loss = cross_entropy.mean(0);
+
+            // backward pass and update
+            loss.backward();
+
+            // update the weights
+            optim.step();
+
+            // Print loss and carridge return
+            losses.push(loss.data.borrow()[0]);
+            print!(
+                "\rEpoch: {} Sample: {}, Loss: {:?}",
+                epoch,
+                i,
+                loss.data.borrow()[0]
+            );
+
+            // force a flush
+            std::io::stdout().flush().unwrap();
         }
-    }
 
-    println!("Hello, world!");
+        let avg_loss: f32 = losses.iter().sum::<f32>() / losses.len() as f32;
+
+        // Print average loss
+        println!("\nEpoch: {} Average Loss: {:?}", epoch, avg_loss);
+    }
 }
