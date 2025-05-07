@@ -33,7 +33,7 @@ impl<'a, 'b> Add<&'b TensorRef> for &'a TensorRef {
         let requires_grad = self.requires_grad || other.requires_grad;
 
         // logging parents
-        let parents = vec![self.0.clone(), other.0.clone()];
+        let parents = vec![self.rc(), other.rc()];
         // println!("[add] New has parents: {:?}", parents);
 
         let grad_fn = if requires_grad {
@@ -80,7 +80,7 @@ impl<'a, 'b> Sub<&'b TensorRef> for &'a TensorRef {
             None
         };
 
-        let parents = vec![self.0.clone(), other.0.clone()];
+        let parents = vec![self.rc(), other.rc()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -108,14 +108,14 @@ impl<'a, 'b> Mul<&'b TensorRef> for &'a TensorRef {
 
         let grad_fn = if requires_grad {
             Some(Rc::new(MulBack {
-                left: self.0.clone(),
-                right: other.0.clone(),
+                left: self.rc(),
+                right: other.rc(),
                 out_shape: broadcast_shape(&self.shape, &other.shape),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
-        let parents = vec![self.0.clone(), other.0.clone()];
+        let parents = vec![self.rc(), other.rc()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -146,15 +146,15 @@ impl<'a, 'b> Div<&'b TensorRef> for &'a TensorRef {
 
         let grad_fn = if requires_grad {
             Some(Rc::new(DivBack {
-                left: self.0.clone(),
-                right: other.0.clone(),
+                left: self.rc(),
+                right: other.rc(),
                 out_shape: broadcast_shape(&self.shape, &other.shape),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone(), other.0.clone()];
+        let parents = vec![self.rc(), other.rc()];
 
         let output_shape = broadcast_shape(&self.shape, &other.shape);
 
@@ -209,7 +209,7 @@ impl TensorRef {
             println!("[sum] Sum result: {:?}", result);
         }
 
-        let parents = vec![self.0.clone()];
+        let parents = vec![self.rc()];
 
         Tensor::new_with_options(result.clone(), out_shape, true, grad_fn, parents)
     }
@@ -258,7 +258,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![self.0.clone()];
+        let parents = vec![self.rc()];
 
         Tensor::new_with_options(result.clone(), out_shape, requires_grad, grad_fn, parents)
     }
@@ -317,15 +317,15 @@ impl TensorRef {
         let grad_fn = if requires_grad {
             Some(Rc::new(MMBack {
                 // expects Rc<tensor>
-                left: self.0.clone(),
-                right: other.0.clone(),
+                left: self.rc(),
+                right: other.rc(),
                 out_shape: output_shape.clone(),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone(), other.0.clone()];
+        let parents = vec![self.rc(), other.rc()];
 
         Tensor::new_with_options(result, output_shape, requires_grad, grad_fn, parents)
     }
@@ -346,14 +346,12 @@ impl TensorRef {
         let requires_grad = self.requires_grad;
 
         let grad_fn = if requires_grad {
-            Some(Rc::new(ReLUBack {
-                input: self.0.clone(),
-            }) as Rc<dyn GradFn>)
+            Some(Rc::new(ReLUBack { input: self.rc() }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone()];
+        let parents = vec![self.rc()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -396,7 +394,7 @@ impl TensorRef {
             vec![self.shape[0], num_classes],
             self.requires_grad,
             None,
-            vec![self.0.clone()],
+            vec![self.rc()],
         )
     }
 }
@@ -422,14 +420,14 @@ impl TensorRef {
 
         let grad_fn = if requires_grad {
             Some(Rc::new(MSEBack {
-                input: self.0.clone(),
-                target: target.0.clone(),
+                input: self.rc(),
+                target: target.rc(),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone(), target.0.clone()];
+        let parents = vec![self.rc(), target.rc()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -492,14 +490,14 @@ impl TensorRef {
         let requires_grad = self.requires_grad || target.requires_grad;
         let grad_fn = if requires_grad {
             Some(Rc::new(CrossEntropyBack {
-                input: self.0.clone(),
-                target: target.0.clone(),
+                input: self.rc(),
+                target: target.rc(),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone(), target.0.clone()];
+        let parents = vec![self.rc(), target.rc()];
 
         Tensor::new_with_options(data, self.shape.clone(), requires_grad, grad_fn, parents)
     }
@@ -556,14 +554,14 @@ impl TensorRef {
         let requires_grad = self.requires_grad || target.requires_grad;
         let grad_fn = if requires_grad {
             Some(Rc::new(CrossEntropyLogitsBack {
-                softmax: self_softmax.0.clone(),
-                target: target.0.clone(),
+                softmax: self_softmax.rc(),
+                target: target.rc(),
             }) as Rc<dyn GradFn>)
         } else {
             None
         };
 
-        let parents = vec![self.0.clone(), target.0.clone()];
+        let parents = vec![self.rc(), target.rc()];
 
         Tensor::new_with_options(data, vec![self.shape[0]], requires_grad, grad_fn, parents)
     }
@@ -598,7 +596,7 @@ impl TensorRef {
             None
         };
 
-        let parents = vec![self.0.clone()];
+        let parents = vec![self.rc()];
 
         Tensor::new_with_options(
             output_data,

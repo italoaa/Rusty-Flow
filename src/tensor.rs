@@ -52,6 +52,18 @@ impl TensorRef {
     pub fn backward(&self) {
         autodiff::backward(self);
     }
+
+    pub fn set_grad(&self, grads: Vec<f32>) {
+        assert_eq!(
+            grads.len(),
+            self.data.borrow().len(),
+            "Gradient size must match data size"
+        );
+        self.grad.replace(Option::Some(grads));
+    }
+    pub fn rc(&self) -> Rc<Tensor> {
+        self.0.clone()
+    }
 }
 
 impl Tensor {

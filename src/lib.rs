@@ -4,6 +4,7 @@
 mod autodiff;
 pub mod broadcast;
 mod operations;
+pub mod optimizers;
 pub mod tensor;
 mod utils;
 use broadcast::{broadcast_shape, BroadcastIterator};
