@@ -1,7 +1,24 @@
 #+title: Rusty flow
 Rusty Flow is a dependency-free autodiff tensor library in Rust built for education. It supports reverse-mode autodiff and PyTorch-style broadcasting using a fully custom backend.
 
-* Training a simple MLP
+Rusty Flow is a dependency-free autodiff tensor library built in Rust, designed primarily for educational purposes. It supports reverse-mode autodiff, enabling efficient backpropagation for training machine learning models. Inspired by PyTorch, it also includes PyTorch-style broadcasting for seamless element-wise operations across tensors of different shapes (including batched matrix multiplication). Rusty Flow offers a flexible, low-level approach to learning and experimenting with neural networks.
+
+_Key features include:_
+
+- Dynamic Graph: The computational graph is built on-the-fly, making it easier to define and modify models at runtime.
+
+- SGD Optimiser: Includes a simple yet effective Stochastic Gradient Descent (SGD) optimiser for model training.
+
+- Weight Initialises: Supports Kaiming and Xavier initialisation to help with faster and more stable model training.
+
+- Dependencie-free: Built entirely in Rust without relying on external dependencies, making it lightweight and easy to integrate.
+
+- PyTorch-style Broadcasting: Automatically handles tensor shape mismatches, simplifying operations across tensors with different shapes and dimensions.
+
+Rusty Flow aims to provide a clear and educational foundation for those new to machine learning and autodiff, while also offering enough flexibility for more experienced users to experiment with custom optimisations and algorithms.
+
+* Training Loop
+The following is an example of how it looks to use rflow in a training loop.
 #+begin_src rust
 let parameters = vec![w1, w2, b1, b2]; // Parameters weights and biases
 let mut optim = SGD::new(
@@ -22,6 +39,81 @@ for epoch in 0..epochs {
         optim.step()
     }
 }
+#+end_src
+
+
+* Building an MLP
+In this section, we will show how to use rflow to build a simple multi-layer perceptron (MLP) and train it. We'll go through weight initialization, setting up an optimizer, performing the forward pass, and calculating loss with backpropagation.
+
+** Weight initialisation
+In rflow, we support Kaiming or Xavier's initialization to set the initial weights of the layers. This ensures efficient training by preventing vanishing/exploding gradients.
+
+#+begin_src rust
+// Layer 1: Input layer → first hidden layer
+let w1 = Tensor::kaiming_init(
+    vec![784, 128], // 784 inputs (28x28 image) → 128 neurons
+    0.1             // Negative slope for leaky ReLU
+);
+let b1 = Tensor::zeros_like(vec![1, 128]); // Bias for layer 1
+
+// Layer 2: First hidden layer → second hidden layer
+let w2 = Tensor::xavier_init(
+    vec![128, 64],  // 128 inputs → 64 neurons
+    0.1             // Gain parameter (often √(6 / (fan_in + fan_out))
+);
+let b2 = Tensor::zeros_like(vec![1, 64]); // Bias for layer 2
+
+// Layer 3: Second hidden layer → output layer
+let w3 = Tensor::kaiming_init(
+    vec![64, 10],   // 64 inputs → 10 output classes (digits 0–9)
+    0.1             // Leaky ReLU slope again, though output is typically linear
+);
+let b3 = Tensor::zeros_like(vec![1, 10]); // Bias for output layer
+#+end_src
+
+
+** Set up our optimiser
+Next, we set up an optimiser to update the weights during training. The optimiser computes the gradients and adjusts the weights in the right direction.
+#+begin_src rust
+let parameters = vec![w1.rc(), w2.rc(), b1.rc(), b2.rc(), ...]; // Parameters weights and biases
+let mut optim = SGD::new(
+    parameters, // Parameters
+    0.001,      // Learning Rate
+    0.9,        // Momentum
+    0.02        // Weight decay
+);
+#+end_src
+
+** Operations in our forward pass
+Using the initialised tensors, we define the forward pass to compute the output of each layer. Here, we perform matrix multiplication, add the biases, and apply Leaky ReLU activation.
+#+begin_src rust
+// Layer 1: Input (784) → Hidden (128)
+let input_to_hidden1 = batch.data.mm(&w1);        // Matrix multiply (batch_size × 784) × (784 × 128) => (batch_size × 128)
+let hidden1_preactivation = &input_to_hidden1 + &b1; // Add bias: (batch_size × 128)
+let hidden1_activated = hidden1_preactivation.lrelu(0.1); // Apply leaky ReLU: (batch_size × 128)
+
+// Layer 2: Hidden (128) → Hidden (64)
+let hidden1_to_hidden2 = hidden1_activated.mm(&w2); // Matrix multiply (batch_size × 128) × (128 × 64) => (batch_size × 64)
+let hidden2_preactivation = &hidden1_to_hidden2 + &b2; // Add bias: (batch_size × 64)
+let hidden2_activated = hidden2_preactivation.lrelu(0.1); // Apply leaky ReLU: (batch_size × 64)
+
+// Layer 3: Hidden (64) → Output (10)
+let hidden2_to_output = hidden2_activated.mm(&w3);  // Matrix multiply (batch_size × 64) × (64 × 10) => (batch_size × 10)
+let logits = &hidden2_to_output + &b3;               // Add bias: (batch_size × 10), this represents the raw output scores for each class (0–9)
+#+end_src
+
+** Loss and Backpropagation
+Finally, we calculate the cross-entropy loss using the logits and one-hot encoded labels. Then, we perform the backward pass to compute gradients and update the weights using the optimiser.
+#+begin_src rust
+// Calculate the cross-entropy loss between logits and one-hot encoded labels
+let cross_entropy_loss = logits.cross_entropy_with_logits(&labels); 
+let mean_loss = cross_entropy_loss.mean(0); // Calculate the mean loss over the batch (scalar value)
+
+// Perform the backward pass to compute gradients of the loss w.r.t. model parameters
+mean_loss.backward(); // Backpropagate the loss through the network
+
+// Apply the gradients to update the model's weights using the optimizer
+optim.step(); // Update parameters using the computed gradients
 #+end_src
 
 * Features
@@ -55,5 +147,5 @@ Epoch: 8 Average Loss: 1.30661
 Epoch: 9 Sample: 92, Loss: 1.0039881
 
 # Local Variables:
-# jinx-local-words: "Rustyflow"
+# jinx-local-words: "Backpropagation Rustyflow logits rflow"
 # End:
