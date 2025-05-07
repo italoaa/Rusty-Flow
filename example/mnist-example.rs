@@ -1,3 +1,20 @@
+// This example uses the dataset from here: https://www.kaggle.com/datasets/oddrationale/mnist-in-csv
+// It uses the polars crate and the indicatif crate for reading csvs and progress bars
+// These are not part of the main library so they are are commented in the cargo.toml file
+// if you want to use this file uncomment them
+// With this and this scrip you should be able to train an MLP to fit MNIST. I was able
+// to achieve the following output
+// OUTPUT:
+// Epoch: 0 Average Loss: 2.2366028
+// Epoch: 1 Average Loss: 1.9926612
+// Epoch: 2 Average Loss: 1.8163393
+// Epoch: 3 Average Loss: 1.6806405
+// Epoch: 4 Average Loss: 1.5742558
+// Epoch: 5 Average Loss: 1.4882416
+// Epoch: 6 Average Loss: 1.4170262
+// Epoch: 7 Average Loss: 1.357685
+// Epoch: 8 Average Loss: 1.30661
+
 use rflow::optimizers::SGD;
 use rflow::tensor::{Tensor, TensorRef};
 

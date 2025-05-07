@@ -96,8 +96,6 @@ mod backward {
             let a = Tensor::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]);
             let b = Tensor::new(vec![5.0, 6.0, 7.0, 8.0], vec![2, 2]);
             let result = a.mm(&b);
-            // TODO: We can't do result.sum(0).sum(0) because the intermediate result vanishes
-            // This needs to be fixed
             let sum = result.sum(0).sum(0);
             // let sum = result.sum(0);
             // let sum = sum.sum(0);

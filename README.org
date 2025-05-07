@@ -1,24 +1,23 @@
-#+title: Rusty flow
-Rusty Flow is a dependency-free autodiff tensor library in Rust built for education. It supports reverse-mode autodiff and PyTorch-style broadcasting using a fully custom backend.
+#+title: Rusty flow (let the gradients flow... i think)
+Rusty Flow is a (almost) dependency-free autodiff tensor library in Rust built for education and exploration. Made for people looking to open up the covers on how tensor libraries work, it supports reverse-mode autodiff and PyTorch-style broadcasting and a flowy river of gradients through a dynamic computational graph! Moreover, it comes with a simple implementation of *Stochastic Gradient Descent* so that you can train from the get go!
 
-Rusty Flow is a dependency-free autodiff tensor library built in Rust, designed primarily for educational purposes. It supports reverse-mode autodiff, enabling efficient backpropagation for training machine learning models. Inspired by PyTorch, it also includes PyTorch-style broadcasting for seamless element-wise operations across tensors of different shapes (including batched matrix multiplication). Rusty Flow offers a flexible, low-level approach to learning and experimenting with neural networks.
+A super simple example one what you can do with rflow!
+#+begin_src rust
+use rflow::tensor::Tensor;
+let a = Tensor::new(
+    vec![1., 2., 3., 4.], // Flat tensor
+    vec![2,2]             // Shape
+);
+let b = Tensor::new(vec![5., 6., 7., 8.], vec![2,2]);
+let c = a.mm(&b);
+let d = c.softmax(1); // softmax that last dim
+// targets one hot encoded
+let targets = Tensor::new_nograds(vec![0., 1.], vec![2]).one_hot();
+let loss = d.cross_entropy_loss(targets).mean(0);
+loss.backwards(); // Let the gradients flow!
+#+end_src
 
-_Key features include:_
-
-- Dynamic Graph: The computational graph is built on-the-fly, making it easier to define and modify models at runtime.
-
-- SGD Optimiser: Includes a simple yet effective Stochastic Gradient Descent (SGD) optimiser for model training.
-
-- Weight Initialises: Supports Kaiming and Xavier initialisation to help with faster and more stable model training.
-
-- Dependencie-free: Built entirely in Rust without relying on external dependencies, making it lightweight and easy to integrate.
-
-- PyTorch-style Broadcasting: Automatically handles tensor shape mismatches, simplifying operations across tensors with different shapes and dimensions.
-
-Rusty Flow aims to provide a clear and educational foundation for those new to machine learning and autodiff, while also offering enough flexibility for more experienced users to experiment with custom optimisations and algorithms.
-
-* Training Loop
-The following is an example of how it looks to use rflow in a training loop.
+With the built in optimiser a training loop would look like this, very similar to Pytorch!
 #+begin_src rust
 let parameters = vec![w1, w2, b1, b2]; // Parameters weights and biases
 let mut optim = SGD::new(
@@ -115,37 +114,3 @@ mean_loss.backward(); // Backpropagate the loss through the network
 // Apply the gradients to update the model's weights using the optimizer
 optim.step(); // Update parameters using the computed gradients
 #+end_src
-
-* Features
-- dynamic graph
-- sgd optimizer
-- Weight initializers
-- Dependencie free
-- Broadcasting
-  
-
-* Example output
-DataLoader created with 100 batches of size 64
-Epoch: 0 Sample: 99, Loss: 2.1085658
-Epoch: 0 Average Loss: 2.2366028
-Epoch: 1 Sample: 99, Loss: 1.8586595
-Epoch: 1 Average Loss: 1.9926612
-Epoch: 2 Sample: 99, Loss: 1.6655923
-Epoch: 2 Average Loss: 1.8163393
-Epoch: 3 Sample: 99, Loss: 1.5152098
-Epoch: 3 Average Loss: 1.6806405
-Epoch: 4 Sample: 99, Loss: 1.3953184
-Epoch: 4 Average Loss: 1.5742558
-Epoch: 5 Sample: 99, Loss: 1.298469
-Epoch: 5 Average Loss: 1.4882416
-Epoch: 6 Sample: 99, Loss: 1.2168155
-Epoch: 6 Average Loss: 1.4170262
-Epoch: 7 Sample: 99, Loss: 1.1489042
-Epoch: 7 Average Loss: 1.357685
-Epoch: 8 Sample: 99, Loss: 1.0930517
-Epoch: 8 Average Loss: 1.30661
-Epoch: 9 Sample: 92, Loss: 1.0039881
-
-# Local Variables:
-# jinx-local-words: "Backpropagation Rustyflow logits rflow"
-# End:

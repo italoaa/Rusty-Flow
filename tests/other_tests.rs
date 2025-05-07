@@ -80,7 +80,6 @@ mod others {
             let hidden2 = activated1.mm(&w2);
             let pre_activated2 = &hidden2 + &b2;
             let activated2 = pre_activated2.relu();
-            // TODO: softmax needs a dim arg
             let output = activated2.softmax(1);
             let target = Tensor::new(vec![1., 0., 0., 1.], vec![2, 2]);
 
