@@ -1,8 +1,8 @@
 #+title: Rusty flow (let the gradients flow... i think)
-#+html: <div style="display: flex; align-items: center;">
-#+html:   <img src="images/flow.png" style="height: 300px; margin-right: 20px;" />
-#+html:   <p>Rusty Flow is a (almost) dependency-free autodiff tensor library in Rust built for education and exploration. Made for people looking to open up the covers on how tensor libraries work, it supports reverse-mode autodiff and PyTorch-style broadcasting and a flowy river of gradients through a dynamic computational graph! Moreover, it comes with a simple implementation of *Stochastic Gradient Descent* so that you can train from the get go!</p>
-#+html: </div>
+
+#+html: <img src="images/flow.png" align="right" width="50%">
+
+Rusty Flow is a (almost) dependency-free autodiff tensor library in Rust built for education and exploration. Made for people looking to open up the covers on how tensor libraries work, it supports reverse-mode autodiff and PyTorch-style broadcasting and a flowy river of gradients through a dynamic computational graph! Moreover, it comes with a simple implementation of *Stochastic Gradient Descent* so that you can train from the get go!
 
 A super simple example one what you can do with rflow!
 #+begin_src rust
